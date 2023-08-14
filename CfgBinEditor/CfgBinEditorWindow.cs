@@ -273,8 +273,13 @@ namespace CfgBinEditor
 
             if (firstSelectedNodeText != Path.GetFileNameWithoutExtension(openFileDialog1.FileName))
             {
+                Tag tag = null;
                 SelectedIndex = Convert.ToInt32(firstSelectedNodeText.Split('_').Last());
-                Tag tag = Tags[SelectedTag].Find(x => x.Name == CfgBinFileOpened.TransformKey(firstSelectedNodeText));
+                
+                if (SelectedTag != null && Tags.ContainsKey(SelectedTag))
+                {
+                    tag = Tags[SelectedTag].Find(x => x.Name == CfgBinFileOpened.TransformKey(firstSelectedNodeText));
+                }
                 
                 if (selectedEntry.Values.ToList()[SelectedIndex].GetType() == typeof(List<CfgBinSupport.Variable>))
                 {
