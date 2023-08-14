@@ -1,0 +1,17 @@
+YKW1 [
+	TEXT_INFO (
+		ID|True
+		Number|False
+		Text|False
+		Unkown|False
+	)	
+]
+
+YKW2 [
+	Text_Info (
+		ID|True
+		Number|False
+		Text|False
+		Unkown|False
+	)
+]
