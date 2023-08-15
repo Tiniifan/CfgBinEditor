@@ -192,13 +192,17 @@ namespace CfgBinEditor
         {
             var rootNode = new TreeNode(input.Key);
 
-            if (input.Value is Dictionary<string, object> dict)
+            if (input.Value is List<CfgBinSupport.Variable> dictVariable)
+            {
+                rootNode.ContextMenuStrip = contextMenuStrip2;
+            } else if (input.Value is Dictionary<string, object> dict)
             {
                 foreach (var entry in dict)
                 {
                     if (entry.Key.Contains("_ITEMS_"))
                     {
                         rootNode.Nodes.Add(new TreeNode(entry.Key.Replace("_ITEMS", "")));
+                        rootNode.ContextMenuStrip = contextMenuStrip2;
                     }
                     else
                     {
@@ -697,6 +701,53 @@ namespace CfgBinEditor
             Array.Reverse(byteArray); // Inverser l'ordre des octets pour little endian
 
             return BitConverter.ToSingle(byteArray, 0);
+        }
+
+        private void DuplicateStripMenuItem1_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode != null)
+            {
+                TreeNode selectedNode = SelectedRightClickTreeNode;
+
+                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
+
+                while (selectedNode.Parent != null)
+                {
+                    pathNodes.Add(selectedNode.Parent);
+                    selectedNode = selectedNode.Parent;
+                }
+
+                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
+
+                for (int i = pathNodes.Count - 1; i >= 1; i--)
+                {
+                    TreeNode node = pathNodes[i];
+
+                    if (selectedEntry.ContainsKey(node.Text))
+                    {
+                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
+                    }
+                }
+
+                var firstItem = selectedEntry.ElementAt(0);
+
+                if (firstItem.Value.GetType() == typeof(List<CfgBinSupport.Variable>))
+                {
+                    string entryName = string.Join("", firstItem.Key.Take(firstItem.Key.LastIndexOf('_')));
+                    List<CfgBinSupport.Variable> variables = firstItem.Value as List<CfgBinSupport.Variable>;
+                    selectedEntry.Add(entryName + "_" + (selectedEntry.Count), variables);
+                    MessageBox.Show(firstItem.Key + " has been duplicated");
+                }
+
+                // Reset
+                SelectedEtry = null;
+                SelectedIndex = -1;
+                SelectedRightClickTreeNode = null;
+
+                // Reload
+                DrawTreeView();
+                treeView1.Focus();
+            }
         }
     }
 }
