@@ -419,6 +419,7 @@ namespace CfgBinEditor
                 SelectedEtry = null;
                 SelectedIndex = -1;
                 SelectedRightClickTreeNode = null;
+                variableDataGridView.Rows.Clear();
 
                 // Reload
                 DrawTreeView();
@@ -729,20 +730,28 @@ namespace CfgBinEditor
                     }
                 }
 
-                var firstItem = selectedEntry.ElementAt(0);
+                var selectedItem = selectedEntry.ElementAt(SelectedIndex);
 
-                if (firstItem.Value.GetType() == typeof(List<CfgBinSupport.Variable>))
+                if (selectedItem.Value.GetType() == typeof(List<CfgBinSupport.Variable>))
                 {
-                    string entryName = string.Join("", firstItem.Key.Take(firstItem.Key.LastIndexOf('_')));
-                    List<CfgBinSupport.Variable> variables = firstItem.Value as List<CfgBinSupport.Variable>;
-                    selectedEntry.Add(entryName + "_" + (selectedEntry.Count), variables);
-                    MessageBox.Show(firstItem.Key + " has been duplicated");
+                    string entryName = string.Join("", selectedItem.Key.Take(selectedItem.Key.LastIndexOf('_')));
+                    List<CfgBinSupport.Variable> variables = selectedItem.Value as List<CfgBinSupport.Variable>;
+                    List<CfgBinSupport.Variable> newVariables = new List<CfgBinSupport.Variable>();
+
+                    for (int i = 0; i < variables.Count; i++)
+                    {
+                        newVariables.Add(new CfgBinSupport.Variable(variables[i]));
+                    }
+
+                    selectedEntry.Add(entryName + "_" + (selectedEntry.Count), newVariables);
+                    MessageBox.Show(selectedItem.Key + " has been duplicated");
                 }
 
                 // Reset
                 SelectedEtry = null;
                 SelectedIndex = -1;
                 SelectedRightClickTreeNode = null;
+                variableDataGridView.Rows.Clear();
 
                 // Reload
                 DrawTreeView();

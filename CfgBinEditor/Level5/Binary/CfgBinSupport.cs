@@ -40,6 +40,12 @@ namespace CfgBinEditor.Level5.Binary
                 Type = type;
                 Value = value;
             }
+
+            public Variable(Variable variable)
+            {
+                Type = variable.Type;
+                Value = variable.Value;
+            }
         }
     }
 }

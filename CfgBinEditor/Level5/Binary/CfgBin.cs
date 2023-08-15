@@ -290,16 +290,16 @@ namespace CfgBinEditor.Level5.Binary
                             switch (variable.Type)
                             {
                                 case CfgBinSupport.Type.String:
-                                    writer.Write((int)variable.Value);
+                                    writer.Write(Convert.ToInt32(variable.Value));
                                     break;
                                 case CfgBinSupport.Type.Int:
-                                    writer.Write((int)variable.Value);
+                                    writer.Write(Convert.ToInt32(variable.Value));
                                     break;
                                 case CfgBinSupport.Type.Float:
-                                    writer.Write((float)variable.Value);
+                                    writer.Write(Convert.ToSingle(variable.Value));
                                     break;
                                 default:
-                                    writer.Write((int)variable.Value);
+                                    writer.Write(Convert.ToInt32(variable.Value));
                                     break;
                             }
                         }
