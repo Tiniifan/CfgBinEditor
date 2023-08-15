@@ -43,6 +43,8 @@ namespace CfgBinEditor
                 SetTagMenu();
 
             }
+
+            variableDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
         private void SetTagMenu()
@@ -757,6 +759,11 @@ namespace CfgBinEditor
                 DrawTreeView();
                 treeView1.Focus();
             }
+        }
+
+        private void CfgBinEditorWindow_SizeChanged(object sender, EventArgs e)
+        {
+            variableDataGridView.AutoResizeColumns();
         }
     }
 }
