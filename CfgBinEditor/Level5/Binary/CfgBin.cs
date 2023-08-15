@@ -200,6 +200,20 @@ namespace CfgBinEditor.Level5.Binary
 
                         // Increment the index for this name
                         nameIndices[name] = index + 1;
+                    } else if (name.EndsWith("_BEG"))
+                    {
+                        var key = name.Substring(0, name.Length - "_BEG".Length);
+
+                        // Retrieve the current index for this name, default to 0 if it's not present
+                        int index = nameIndices.TryGetValue(name, out int currentIndex) ? currentIndex : 0;
+
+                        var newDict = new Dictionary<string, object>();
+                        stack.Peek().Add(key + "_BEG_" + index, newDict);
+
+                        stack.Push(newDict);
+
+                        // Increment the index for this name
+                        nameIndices[name] = index + 1;
                     }
                     else if (name.EndsWith("_END"))
                     {
