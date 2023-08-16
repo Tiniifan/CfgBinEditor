@@ -604,5 +604,13 @@ namespace CfgBinEditor.Level5.Binary
                 }
             }
         }
+
+        public void InsertStrings(int key, string newText)
+        {
+            if (!Strings.ContainsKey(key))
+            {
+                Strings[key] = newText;
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CfgBinEditor.UI;
 using CfgBinEditor.Level5.Binary;
 
 namespace CfgBinEditor
@@ -22,7 +23,11 @@ namespace CfgBinEditor
 
         private TreeNode SelectedRightClickTreeNode;
 
-        private bool UserEditInProgress = false;
+        private bool VariblesDataGridEditInProgress = false;
+
+        private bool StringsDataGridEditInProgress = false;
+
+        private bool StringsNewRowBeingAdded = false;
 
         private Dictionary<string, List<Tag>> Tags;
 
@@ -44,7 +49,7 @@ namespace CfgBinEditor
 
             }
 
-            variableDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            variablesDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
         private void SetTagMenu()
@@ -236,6 +241,16 @@ namespace CfgBinEditor
             treeView1.Nodes.Add(rootNode);
         }
 
+        private void FillStrings()
+        {
+            stringsDataGridView.Rows.Clear();
+
+            foreach(KeyValuePair<int, string> kvp in CfgBinFileOpened.Strings)
+            {
+                stringsDataGridView.Rows.Add(new object[] { kvp.Key.ToString("X8"), kvp.Value });
+            }
+        }
+
         private void OpenToolStripMenuItem_Click(object sender, EventArgs e)
         {
             openFileDialog1.Filter = "Level 5 Bin files (*.bin)|*.bin";
@@ -243,13 +258,15 @@ namespace CfgBinEditor
 
             if (openFileDialog1.ShowDialog() == DialogResult.OK)
             {
-                variableDataGridView.Rows.Clear();
+                variablesDataGridView.Rows.Clear();
 
                 CfgBinFileOpened = new CfgBin(new FileStream(openFileDialog1.FileName, FileMode.Open, FileAccess.Read));
                 DrawTreeView();
+                FillStrings();
 
                 saveToolStripMenuItem.Enabled = true;
-                variableDataGridView.Enabled = true;
+                variablesDataGridView.Enabled = true;
+                stringsDataGridView.Enabled = true;
             }
         }
 
@@ -291,7 +308,7 @@ namespace CfgBinEditor
                 {
                     SelectedEtry = selectedEntry;
 
-                    variableDataGridView.Rows.Clear();
+                    variablesDataGridView.Rows.Clear();
                     List<CfgBinSupport.Variable> variables = SelectedEtry.Values.ToList()[SelectedIndex] as List<CfgBinSupport.Variable>;
 
                     for (int i = 0; i < variables.Count; i++)
@@ -306,24 +323,24 @@ namespace CfgBinEditor
                         }
 
                         CfgBinSupport.Variable variable = variables[i];
-                        variableDataGridView.Rows.Add();
+                        variablesDataGridView.Rows.Add();
 
-                        DataGridViewComboBoxCell comboBox = (variableDataGridView.Rows[0].Cells[1] as DataGridViewComboBoxCell);
+                        DataGridViewComboBoxCell comboBox = (variablesDataGridView.Rows[0].Cells[1] as DataGridViewComboBoxCell);
 
                         if (variable.Type is CfgBinSupport.Type.String)
                         {
                             if (showAsHex == true)
                             {
-                                variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
                             } else
                             {
                                 if (CfgBinFileOpened.Strings.ContainsKey((int)variable.Value))
                                 {
-                                    variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], CfgBinFileOpened.Strings[(int)variable.Value], showAsHex });
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], CfgBinFileOpened.Strings[(int)variable.Value], showAsHex });
                                 }
                                 else
                                 {
-                                    variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], "", showAsHex });
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], "", showAsHex });
                                 }
                             }                         
                         }
@@ -331,9 +348,9 @@ namespace CfgBinEditor
                         {
                             if (showAsHex == true)
                             {
-                                variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
                             } else {
-                                variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], variable.Value, showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], variable.Value, showAsHex });
                             }
                         }
                         else if (variable.Type is CfgBinSupport.Type.Float)
@@ -341,10 +358,10 @@ namespace CfgBinEditor
                             if (showAsHex == true)
                             {
                                 byte[] byteArray = BitConverter.GetBytes((float)variable.Value);
-                                variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], BitConverter.ToString(byteArray).Replace("-", ""), showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], BitConverter.ToString(byteArray).Replace("-", ""), showAsHex });
                             } else
                             {
-                                variableDataGridView.Rows[variableDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], variable.Value, showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], variable.Value, showAsHex });
                             }
                         }
                     }
@@ -421,7 +438,7 @@ namespace CfgBinEditor
                 SelectedEtry = null;
                 SelectedIndex = -1;
                 SelectedRightClickTreeNode = null;
-                variableDataGridView.Rows.Clear();
+                variablesDataGridView.Rows.Clear();
 
                 // Reload
                 DrawTreeView();
@@ -448,10 +465,10 @@ namespace CfgBinEditor
 
         private void VariableDataGridView_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
         {
-            string type = variableDataGridView.Rows[variableDataGridView.CurrentRow.Index].Cells[1].Value.ToString();
-            bool showAsHex = Convert.ToBoolean(variableDataGridView.Rows[variableDataGridView.CurrentRow.Index].Cells[3].Value);
+            string type = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[1].Value.ToString();
+            bool showAsHex = Convert.ToBoolean(variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[3].Value);
 
-            if (variableDataGridView.CurrentCell.ColumnIndex == 2)
+            if (variablesDataGridView.CurrentCell.ColumnIndex == 2)
             {
                 TextBox textBox = e.Control as TextBox;
                 textBox.TextChanged -= null;
@@ -508,37 +525,37 @@ namespace CfgBinEditor
 
         private void VariableDataGridView_CurrentCellDirtyStateChanged(object sender, EventArgs e)
         {
-            if (variableDataGridView.IsCurrentCellDirty)
+            if (variablesDataGridView.IsCurrentCellDirty)
             {
-                if (!UserEditInProgress)
+                if (!VariblesDataGridEditInProgress)
                 {
-                    UserEditInProgress = true;
-                    variableDataGridView.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                    VariblesDataGridEditInProgress = true;
+                    variablesDataGridView.CommitEdit(DataGridViewDataErrorContexts.Commit);
                 }
             }
         }
 
         private void VariableDataGridView_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
-            if (UserEditInProgress)
+            if (VariblesDataGridEditInProgress)
             {
                 int index = e.RowIndex;
                 List<CfgBinSupport.Variable> variables = SelectedEtry.Values.ToList()[SelectedIndex] as List<CfgBinSupport.Variable>;
 
-                string type = variableDataGridView.Rows[e.RowIndex].Cells[1].Value.ToString();
-                object value = variableDataGridView.Rows[e.RowIndex].Cells[2].Value;
-                bool showAsHex = Convert.ToBoolean(variableDataGridView.Rows[e.RowIndex].Cells[3].Value);
+                string type = variablesDataGridView.Rows[e.RowIndex].Cells[1].Value.ToString();
+                object value = variablesDataGridView.Rows[e.RowIndex].Cells[2].Value;
+                bool showAsHex = Convert.ToBoolean(variablesDataGridView.Rows[e.RowIndex].Cells[3].Value);
 
                 if (e.ColumnIndex == 1)
                 {
-                    UserEditInProgress = false;
+                    VariblesDataGridEditInProgress = false;
 
                     if (type == "Int" || type == "Unknown")
                     {
                         if (showAsHex)
                         {
                             variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
                         }
                         else
                         {
@@ -546,12 +563,12 @@ namespace CfgBinEditor
                             {
                                 int convertedValue = Convert.ToInt32(value);
                                 variables[index].Value = convertedValue;
-                                variableDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
                             }
                             catch (FormatException)
                             {
                                 variables[index].Value = 0;
-                                variableDataGridView.Rows[e.RowIndex].Cells[2].Value = 0;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = 0;
                             }
                         }
                     }
@@ -560,7 +577,7 @@ namespace CfgBinEditor
                         if (showAsHex)
                         {
                             variables[index].Value = ConvertLittleEndianHexToFloat(value.ToString());
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToFloat(value.ToString()).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToFloat(value.ToString()).ToString("X8");
                         }
                         else
                         {
@@ -568,12 +585,12 @@ namespace CfgBinEditor
                             {
                                 float convertedValue = Convert.ToSingle(value);
                                 variables[index].Value = convertedValue;
-                                variableDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
                             }
                             catch (FormatException)
                             {
                                 variables[index].Value = 0f;
-                                variableDataGridView.Rows[e.RowIndex].Cells[2].Value = 0f;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = 0f;
                             }
                         }
                     }
@@ -582,12 +599,12 @@ namespace CfgBinEditor
                         if (showAsHex)
                         {
                             variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
                         }
                         else
                         {
                             variables[index].Value = value.ToString();
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = value.ToString();
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = value.ToString();
                         }
                     }
                 }
@@ -628,17 +645,17 @@ namespace CfgBinEditor
                 }
                 else if (e.ColumnIndex == 3)
                 {
-                    UserEditInProgress = false;
+                    VariblesDataGridEditInProgress = false;
 
                     if (type == "Int" || type == "Unknown")
                     {
                         if (showAsHex)
                         {
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32(value).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32(value).ToString("X8");
                         }
                         else
                         {
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString());
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString());
                         }                 
                     }
                     else if (type == "Float")
@@ -646,32 +663,31 @@ namespace CfgBinEditor
                         if (showAsHex)
                         {
                             byte[] byteArray = BitConverter.GetBytes((float)value);
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = BitConverter.ToString(byteArray).Replace("-", "");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = BitConverter.ToString(byteArray).Replace("-", "");
                         }
                         else
                         {
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToFloat(value.ToString());
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToFloat(value.ToString());
                         }
                     }
                     else if (type == "String")
                     {
                         if (showAsHex)
                         {
-                            variableDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32((int)variables[index].Value).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32((int)variables[index].Value).ToString("X8");
                         }
                         else
                         {
                             if (CfgBinFileOpened.Strings.ContainsKey((int)variables[index].Value)) 
                             {
-                                variableDataGridView.Rows[e.RowIndex].Cells[2].Value = CfgBinFileOpened.Strings[(int)variables[index].Value];
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = CfgBinFileOpened.Strings[(int)variables[index].Value];
                             }
                         }
                     }
                 }
-                
-                UserEditInProgress = false; // Réinitialisez le drapeau après le traitement
-            }
-            
+
+                VariblesDataGridEditInProgress = false; // Réinitialisez le drapeau après le traitement
+            }        
         }
 
         private int ConvertLittleEndianHexToInt(string hexString)
@@ -753,7 +769,7 @@ namespace CfgBinEditor
                 SelectedEtry = null;
                 SelectedIndex = -1;
                 SelectedRightClickTreeNode = null;
-                variableDataGridView.Rows.Clear();
+                variablesDataGridView.Rows.Clear();
 
                 // Reload
                 DrawTreeView();
@@ -763,7 +779,81 @@ namespace CfgBinEditor
 
         private void CfgBinEditorWindow_SizeChanged(object sender, EventArgs e)
         {
-            variableDataGridView.AutoResizeColumns();
+            variablesDataGridView.AutoResizeColumns();
+        }
+
+        private void StringsDataGridView_RowsAdded(object sender, DataGridViewRowsAddedEventArgs e)
+        {
+            StringsNewRowBeingAdded = true;
+        }
+
+        private void StringsDataGridView_RowValidating(object sender, DataGridViewCellCancelEventArgs e)
+        {
+            if (!StringsNewRowBeingAdded) return;
+
+            int offset = 0;
+            string newText = stringsDataGridView.Rows[stringsDataGridView.RowCount - 2].Cells[1].Value.ToString();
+
+            if (CfgBinFileOpened.Strings.Count > 0)
+            {
+                KeyValuePair<int, string> lastItem = CfgBinFileOpened.Strings.ElementAt(CfgBinFileOpened.Strings.Count - 1);
+                offset = lastItem.Key + Encoding.UTF8.GetBytes(lastItem.Value).Length + 1;
+            }
+
+            CfgBinFileOpened.InsertStrings(offset, newText);
+            stringsDataGridView.Rows[stringsDataGridView.RowCount - 2].Cells[0].Value = offset.ToString("X8");
+            StringsNewRowBeingAdded = false;
+        }
+
+        private void StringsDataGridView_CurrentCellDirtyStateChanged(object sender, EventArgs e)
+        {
+            if (stringsDataGridView.IsCurrentCellDirty)
+            {
+                if (!StringsDataGridEditInProgress)
+                {
+                    StringsDataGridEditInProgress = true;
+                    stringsDataGridView.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                }
+            }
+        }
+
+        private void StringsDataGridView_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+
+        }
+
+        private void stringsDataGridView_CellValidating(object sender, DataGridViewCellValidatingEventArgs e)
+        {
+
+        }
+
+        private void StringsDataGridView_CellValidated(object sender, DataGridViewCellEventArgs e)
+        {
+            if (!StringsDataGridEditInProgress) return;
+
+            int offset = ConvertLittleEndianHexToInt(stringsDataGridView.Rows[e.RowIndex].Cells[0].Value.ToString());
+            string newText = stringsDataGridView.Rows[e.RowIndex].Cells[1].Value.ToString();
+            CfgBinFileOpened.UpdateStrings(offset, newText);
+            Console.WriteLine(stringsDataGridView.Rows[e.RowIndex].Cells[0].Value + " " + offset + " " + newText);
+            StringsDataGridEditInProgress = false;
+
+            BeginInvoke(new Action(() =>
+            {
+                stringsDataGridView.Rows.Clear();
+                FillStrings();
+            }));
+        }
+
+        private void VariablesDataGridView_CellValidated(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.ColumnIndex == 2)
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    stringsDataGridView.Rows.Clear();
+                    FillStrings();
+                }));
+            }
         }
     }
 }
