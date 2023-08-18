@@ -60,7 +60,7 @@ namespace CfgBinEditor.Level5.Binary
                 if (Strings.Count > 0)
                 {
                     writer.Write(EncodeStrings(Strings));
-                    header.StringTableOffset = (int)writer.Position - header.StringTableOffset;
+                    header.StringTableLength = (int)writer.Position - header.StringTableOffset;
                     writer.WriteAlignment(0x10, 0xFF);
                 }
 
