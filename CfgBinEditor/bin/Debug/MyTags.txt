@@ -8,7 +8,7 @@ YKW1 [
 ]
 
 YKW2 [
-	Text_Info (
+	TEXT_INFO (
 		ID|True
 		Number|False
 		Text|False

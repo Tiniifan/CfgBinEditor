@@ -108,6 +108,77 @@ namespace CfgBinEditor.Level5.Binary
             }
         }
 
+        public List<CfgBinSupport.Variable> ItemToListVariable(byte[] entryBuffer)
+        {
+            using (BinaryDataReader reader = new BinaryDataReader(entryBuffer))
+            {
+                uint crc32 = reader.ReadValue<uint>();
+
+                int paramCount = reader.ReadValue<byte>();
+                CfgBinSupport.Type[] paramTypes = new CfgBinSupport.Type[paramCount];
+                int paramIndex = 0;
+
+                for (int j = 0; j < (int)Math.Ceiling((double)paramCount / 4); j++)
+                {
+                    byte paramType = reader.ReadValue<byte>();
+                    for (int k = 0; k < 4; k++)
+                    {
+                        if (paramIndex < paramTypes.Length)
+                        {
+                            int tag = (paramType >> (2 * k)) & 3;
+
+                            switch (tag)
+                            {
+                                case 0:
+                                    paramTypes[paramIndex] = CfgBinSupport.Type.String;
+                                    break;
+                                case 1:
+                                    paramTypes[paramIndex] = CfgBinSupport.Type.Int;
+                                    break;
+                                case 2:
+                                    paramTypes[paramIndex] = CfgBinSupport.Type.Float;
+                                    break;
+                                default:
+                                    paramTypes[paramIndex] = CfgBinSupport.Type.Unknown;
+                                    break;
+                            }
+
+                            paramIndex++;
+                        }
+                    }
+                }
+
+                if ((Math.Ceiling((double)paramCount / 4) + 1) % 4 != 0)
+                {
+                    reader.Seek((uint)(reader.Position + 4 - (reader.Position % 4)));
+                }
+
+                List<CfgBinSupport.Variable> variables = new List<CfgBinSupport.Variable>();
+
+                for (int j = 0; j < paramCount; j++)
+                {
+                    if (paramTypes[j] == CfgBinSupport.Type.String)
+                    {
+                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.String, reader.ReadValue<int>()));
+                    }
+                    else if (paramTypes[j] == CfgBinSupport.Type.Int)
+                    {
+                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Int, reader.ReadValue<int>()));
+                    }
+                    else if (paramTypes[j] == CfgBinSupport.Type.Float)
+                    {
+                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Float, reader.ReadValue<float>()));
+                    }
+                    else if (paramTypes[j] == CfgBinSupport.Type.Unknown)
+                    {
+                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Unknown, reader.ReadValue<int>()));
+                    }
+                }
+
+                return variables;
+            }
+        }
+
         private Dictionary<string, object> ParseEntries(int entriesCount, byte[] entriesBuffer, Dictionary<uint, string> keyTable)
         {
             var outputDict = new Dictionary<string, object>();
@@ -243,7 +314,7 @@ namespace CfgBinEditor.Level5.Binary
             return outputDict;
         }
 
-        private byte[] EncodeEntry(KeyValuePair<string, object> entry)
+        public byte[] EncodeEntry(KeyValuePair<string, object> entry)
         {
             using (MemoryStream memoryStream = new MemoryStream())
             {
