@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using System.Windows.Forms;
 using System.Collections.Generic;
+using CfgBinEditor.UI;
 using CfgBinEditor.Level5.Logic;
 using CfgBinEditor.Level5.Binary;
 
@@ -648,31 +649,24 @@ namespace CfgBinEditor
 
             Entry entry = selectedNode.Tag as Entry;
             Entry entryParent = selectedNode.Tag as Entry;
-
-            byte[] encodedData = entry.EntryToBin();
-            MemoryStream memoryStream = new MemoryStream(encodedData);
-
-            CfgBin newCfgBin = new CfgBin(memoryStream);
-
-            if (newCfgBin != null)
+            Entry clonedEntry = entry.Clone();
+            
+            // Get all entries names
+            Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
+            foreach (var myEntry in CfgBinFileOpened.Entries)
             {
-                // Get all entries names
-                Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
-                foreach (var myEntry in CfgBinFileOpened.Entries)
-                {
-                    myEntry.GetEntryNameOccurrences(nameOccurrences);
-                }
-
-                // Update import entries names
-                foreach (var newEntry in newCfgBin.Entries)
-                {
-                    newEntry.UpdateEntryNames(nameOccurrences);
-                    entryParent.Children.Add(newEntry);
-                    parentNode.Nodes.Add(CreateTreeNode(newEntry));
-                }
-
-                MessageBox.Show(SelectedRightClickTreeNode.Text + " has been duplicated!");
+                myEntry.GetEntryNameOccurrences(nameOccurrences);
             }
+
+            // Update import entries names
+            clonedEntry.UpdateEntryNames(nameOccurrences);
+            entryParent.Children.Add(clonedEntry);
+            parentNode.Nodes.Add(CreateTreeNode(clonedEntry));
+
+            TreeNode latestNode = parentNode.Nodes[parentNode.Nodes.Count - 1];
+            treeView1.SelectedNode = latestNode;
+            latestNode.EnsureVisible();
+            MessageBox.Show(SelectedRightClickTreeNode.Text + " has been duplicated on " + latestNode.Text + "!");
 
             // Reset
             SelectedRightClickTreeNode = null;

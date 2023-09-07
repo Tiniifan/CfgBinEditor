@@ -120,6 +120,25 @@ namespace CfgBinEditor.Level5.Logic
             }
         }
 
+        // Recursive cloning function
+        public Entry Clone()
+        {
+            // Clone variables
+            List<Variable> clonedVariables = Variables.Select(v => new Variable(v)).ToList();
+
+            // Clone children recursively
+            List<Entry> clonedChildren = Children.Select(child => child.Clone()).ToList();
+
+            // Create a new cloned entry
+            Entry clonedEntry = new Entry(Name, clonedVariables)
+            {
+                EndTerminator = EndTerminator,
+                Children = clonedChildren
+            };
+
+            return clonedEntry;
+        }
+
         public int Count()
         {
             int totalCount = 1 + Convert.ToInt32(EndTerminator);
