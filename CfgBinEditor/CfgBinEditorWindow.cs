@@ -1,14 +1,10 @@
 ﻿using System;
 using System.IO;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using CfgBinEditor.UI;
+using System.Collections.Generic;
+using CfgBinEditor.Level5.Logic;
 using CfgBinEditor.Level5.Binary;
 
 namespace CfgBinEditor
@@ -17,77 +13,19 @@ namespace CfgBinEditor
     {
         private CfgBin CfgBinFileOpened;
 
-        public string SelectedItem;
-
-        public Dictionary<string, object> SelectedEntry;
-
         private TreeNode SelectedRightClickTreeNode;
 
         private bool VariblesDataGridEditInProgress = false;
 
-        private bool StringsDataGridEditInProgress = false;
-
-        private bool StringsNewRowBeingAdded = false;
+        private string SelectedTag = null;
 
         private Dictionary<string, List<Tag>> Tags;
 
-        private string SelectedTag;
-
-        private SearchWindow SearchWindow;
+        private Dictionary<string, Dictionary<string, List<ID>>> IDs;
 
         public CfgBinEditorWindow()
         {
             InitializeComponent();
-        }
-
-        private void CfgBinEditorWindow_Load(object sender, EventArgs e)
-        {
-            Tags = new Dictionary<string, List<Tag>>();
-
-            if (File.Exists("./MyTags.txt"))
-            {
-                Tags = ImportTags("./MyTags.txt");
-                SetTagMenu();
-
-            }
-
-            variablesDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        }
-
-        private void SetTagMenu()
-        {
-            tagsToolStripMenuItem.DropDownItems.Clear();
-
-            foreach (string key in Tags.Keys)
-            {
-                ToolStripMenuItem newMenu = new ToolStripMenuItem(key);
-                newMenu.Click += MenuItem_Click;
-                tagsToolStripMenuItem.DropDownItems.Add(newMenu);
-            }
-
-            if (Tags.Count > 0)
-            {
-                tagsToolStripMenuItem.DropDownItems[0].PerformClick();
-            }
-        }
-
-        private void MenuItem_Click(object sender, EventArgs e)
-        {
-            // Décocher tous les éléments du menu
-            foreach (ToolStripMenuItem item in menuStrip1.Items)
-            {
-                if (item is ToolStripMenuItem)
-                {
-                    item.Checked = false;
-                }
-            }
-
-            // Marquer l'élément de menu cliqué
-            if (sender is ToolStripMenuItem clickedItem)
-            {
-                clickedItem.Checked = true;
-                SelectedTag = clickedItem.Text; // Mettre à jour la variable SelectedTag avec le nom du menu
-            }
         }
 
         private Dictionary<string, List<Tag>> ImportTags(string filePath)
@@ -95,7 +33,7 @@ namespace CfgBinEditor
             Dictionary<string, List<Tag>> tagDictionary = new Dictionary<string, List<Tag>>();
 
             try
-            {               
+            {
                 string currentKey = null;
                 List<Tag> currentTags = null;
 
@@ -137,104 +75,75 @@ namespace CfgBinEditor
             return tagDictionary;
         }
 
-        private void ImportTagsToolStripMenuItem_Click(object sender, EventArgs e)
+        public static Dictionary<string, Dictionary<string, List<ID>>> ImportIDs(string filePath)
         {
-            openFileDialog2.Filter = "Text File (*.txt)|*.txt";
-            openFileDialog2.RestoreDirectory = true;
+            Dictionary<string, Dictionary<string, List<ID>>> result = new Dictionary<string, Dictionary<string, List<ID>>>();
 
-            if (openFileDialog2.ShowDialog() == DialogResult.OK)
+            string currentKey = null;
+            string currentCategory = null;
+            List<ID> currentIDs = null;
+
+            string[] lines = File.ReadAllLines(filePath);
+
+            foreach (string line in lines)
             {
-                Dictionary<string, List<Tag>> newTags = ImportTags(openFileDialog2.FileName);
+                string trimmedLine = line.Trim();
 
-                foreach(KeyValuePair<string, List<Tag>> kvp in newTags)
+                if (trimmedLine.EndsWith("["))
                 {
-                    foreach(Tag tag in kvp.Value)
-                    {
-                        if (Tags.ContainsKey(kvp.Key) == false)
-                        {
-                            Tags.Add(kvp.Key, new List<Tag>());
-                        }
-
-                        if (Tags[kvp.Key].Any(x => x.Name != tag.Name))
-                        {
-                            Tags[kvp.Key].Add(tag);
-                        }
-                    }
+                    currentKey = trimmedLine.Trim('[', ']');
+                    result[currentKey] = new Dictionary<string, List<ID>>();
                 }
-
-                // Update tag
-                SetTagMenu();
-
-                // Save new tag
-                string filePath = "./MyTags.txt";
-
-                try
+                else if (currentKey != null && trimmedLine.EndsWith("("))
                 {
-                    using (StreamWriter writer = new StreamWriter(filePath))
-                    {
-                        foreach (var kvp in Tags)
-                        {
-                            writer.WriteLine(kvp.Key + " [");
-                            foreach (Tag tag in kvp.Value)
-                            {
-                                writer.WriteLine("\t" + tag.Name + " (");
-                                foreach (var property in tag.Properties)
-                                {
-                                    writer.WriteLine("\t\t" + property.Key + "|" + property.Value.ToString());
-                                }
-                                writer.WriteLine("\t)");
-                            }
-                            writer.WriteLine("]");
-                        }
-                    }
-
-                    MessageBox.Show("MyTags.txt was updated!");
+                    currentCategory = trimmedLine.Trim('(', ')').Trim();
+                    currentIDs = new List<ID>();
+                    result[currentKey][currentCategory] = currentIDs;
                 }
-                catch (Exception)
+                else if (currentCategory != null && trimmedLine.Contains("|"))
                 {
-                    MessageBox.Show("An error occurred while saving the tags.");
-                }
-            }
-        }
-
-        private TreeNode CreateTreeNode(KeyValuePair<string, object> input)
-        {
-            var rootNode = new TreeNode(input.Key);
-
-            if (input.Value is List<CfgBinSupport.Variable> dictVariable)
-            {
-                rootNode.ContextMenuStrip = contextMenuStrip2;
-            } else if (input.Value is Dictionary<string, object> dict)
-            {
-                foreach (var entry in dict)
-                {
-                    if (entry.Key.Contains("_ITEMS_"))
+                    string[] parts = trimmedLine.Split('|');
+                    if (parts.Length == 2)
                     {
-                        rootNode.Nodes.Add(new TreeNode(entry.Key.Replace("_ITEMS", "")));
-                        rootNode.ContextMenuStrip = contextMenuStrip2;
-                    }
-                    else
-                    {
-                        rootNode.ContextMenuStrip = contextMenuStrip1;
-
-                        var childNode = CreateTreeNode(entry);
-
-                        if (childNode != null)
-                        {
-                            rootNode.Nodes.Add(childNode);
-                        }
+                        int hash = Convert.ToInt32(parts[0], 16);
+                        string name = parts[1].Trim();
+                        currentIDs.Add(new ID(hash, name));
                     }
                 }
             }
 
-            return rootNode;
+            return result;
         }
 
-        private void DrawTreeView()
+        private TreeNode CreateTreeNode(Entry entry)
         {
-            TreeNode rootNode = new TreeNode(Path.GetFileNameWithoutExtension(openFileDialog1.FileName));
+            TreeNode entryNode = new TreeNode(entry.Name);
+            entryNode.Tag = entry;
 
-            foreach (var entry in CfgBinFileOpened.Entries)
+            if (entry.Children.Count > 0)
+            {
+                foreach (Entry subEntry in entry.Children)
+                {
+                    entryNode.Nodes.Add(CreateTreeNode(subEntry));
+                }
+
+                entryNode.ContextMenuStrip = contextMenuStrip1;
+            }
+            else
+            {
+                entryNode.ContextMenuStrip = contextMenuStrip2;
+            }
+
+            return entryNode;
+        }
+
+        private void DrawTreeView(string rootName, List<Entry> entries)
+        {
+            TreeNode rootNode = new TreeNode(rootName);
+            rootNode.ContextMenuStrip = contextMenuStrip3;
+            rootNode.Expand();
+
+            foreach (Entry entry in entries)
             {
                 rootNode.Nodes.Add(CreateTreeNode(entry));
             }
@@ -243,110 +152,186 @@ namespace CfgBinEditor
             treeView1.Nodes.Add(rootNode);
         }
 
-        private void DrawVariablesDataGridView(string name, Dictionary<string, object> selectedEntry)
+        private void DrawVariablesDataGridView(TreeNode node)
         {
             Tag tag = null;
+            Entry entry = node.Tag as Entry;
 
-            if (SelectedTag != null && Tags.ContainsKey(SelectedTag))
+            if (entry != null)
             {
-                tag = Tags[SelectedTag].Find(x => x.Name == CfgBinFileOpened.TransformKey(name));
-            }
-
-            SelectedItem = name;
-            SelectedEntry = selectedEntry;
-
-            variablesDataGridView.Rows.Clear();
-            List<CfgBinSupport.Variable> variables = SelectedEntry[SelectedItem] as List<CfgBinSupport.Variable>;
-
-            if (variables != null)
-            {
-                for (int i = 0; i < variables.Count; i++)
+                if (SelectedTag != null && Tags.ContainsKey(SelectedTag))
                 {
-                    string variableName = "Variable " + i;
-                    bool showAsHex = false;
+                    tag = Tags[SelectedTag].Find(x => x.Name == entry.GetName());
+                }
 
-                    if (tag != null)
+                variablesDataGridView.Rows.Clear();
+                List<Variable> variables = (node.Tag as Entry).Variables;
+
+                if (variables != null)
+                {
+                    for (int i = 0; i < variables.Count; i++)
                     {
-                        variableName = tag.Properties.Keys.ToArray()[i];
-                        showAsHex = tag.Properties[variableName];
-                    }
+                        string variableName = "Variable " + i;
+                        bool showAsHex = false;
 
-                    CfgBinSupport.Variable variable = variables[i];
-                    variablesDataGridView.Rows.Add();
-
-                    DataGridViewComboBoxCell comboBox = (variablesDataGridView.Rows[0].Cells[1] as DataGridViewComboBoxCell);
-
-                    if (variable.Type is CfgBinSupport.Type.String)
-                    {
-                        if (showAsHex == true)
+                        if (tag != null)
                         {
-                            variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
+                            variableName = tag.Properties.Keys.ToArray()[i];
+                            showAsHex = tag.Properties[variableName];
                         }
-                        else
+
+                        Variable variable = variables[i];
+                        variablesDataGridView.Rows.Add();
+
+                        DataGridViewComboBoxCell comboBox = (variablesDataGridView.Rows[0].Cells[1] as DataGridViewComboBoxCell);
+
+                        if (variable.Type is Level5.Logic.Type.String)
                         {
-                            if (CfgBinFileOpened.Strings.ContainsKey((int)variable.Value))
+                            if (showAsHex == true)
                             {
-                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], CfgBinFileOpened.Strings[(int)variable.Value], showAsHex });
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
                             }
                             else
                             {
-                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], "", showAsHex });
+                                OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
+
+                                if (offsetTextPair.Offset != -1)
+                                {
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], offsetTextPair.Text, showAsHex });
+                                }
+                                else
+                                {
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], "", showAsHex });
+                                }
+                            }
+                        }
+                        else if (variable.Type is Level5.Logic.Type.Int || variable.Type is Level5.Logic.Type.Unknown)
+                        {
+                            ID myID = IDs != null
+                                ? IDs.Values
+                                    .SelectMany(outerDict => outerDict.Values
+                                        .SelectMany(innerList => innerList
+                                            .Where(id => id.Hash == Convert.ToInt32(variable.Value))))
+                                    .FirstOrDefault()
+                                : null;
+
+                            if (myID != null)
+                            {
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], myID.Name, showAsHex });
+                            }
+                            else
+                            {
+                                if (showAsHex == true)
+                                {
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
+                                }
+                                else
+                                {
+                                    variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], variable.Value, showAsHex });
+                                }
+                            }
+                        }
+                        else if (variable.Type is Level5.Logic.Type.Float)
+                        {
+                            if (showAsHex == true)
+                            {
+                                byte[] byteArray = BitConverter.GetBytes((float)variable.Value);
+                                Array.Reverse(byteArray);
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], BitConverter.ToString(byteArray).Replace("-", ""), showAsHex });
+                            }
+                            else
+                            {
+                                variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], variable.Value, showAsHex });
                             }
                         }
                     }
-                    else if (variable.Type is CfgBinSupport.Type.Int || variable.Type is CfgBinSupport.Type.Unknown)
-                    {
-                        if (showAsHex == true)
-                        {
-                            variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], Convert.ToInt32(variable.Value).ToString("X8"), showAsHex });
-                        }
-                        else
-                        {
-                            variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[1], variable.Value, showAsHex });
-                        }
-                    }
-                    else if (variable.Type is CfgBinSupport.Type.Float)
-                    {
-                        if (showAsHex == true)
-                        {
-                            byte[] byteArray = BitConverter.GetBytes((float)variable.Value);
-                            variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], BitConverter.ToString(byteArray).Replace("-", ""), showAsHex });
-                        }
-                        else
-                        {
-                            variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[2], variable.Value, showAsHex });
-                        }
-                    }
                 }
-            }        
+            }
         }
 
         private void FillStrings()
         {
             stringsDataGridView.Rows.Clear();
 
-            foreach(KeyValuePair<int, string> kvp in CfgBinFileOpened.Strings)
+            foreach (KeyValuePair<int, string> kvp in CfgBinFileOpened.Strings)
             {
                 stringsDataGridView.Rows.Add(new object[] { kvp.Key.ToString("X8"), kvp.Value });
             }
         }
 
-        private int FindMissingNumber(List<int> numbers)
+        private int ConvertLittleEndianHexToInt(string hexString)
         {
-            for (int i = 1; i < numbers.Count; i++)
+            int byteCount = (hexString.Length + 1) / 2;
+            byte[] byteArray = new byte[byteCount];
+
+            for (int i = 0; i < byteCount; i++)
             {
-                if (numbers[i] - numbers[i - 1] > 1)
-                {
-                    return numbers[i - 1] + 1;
-                }
+                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
+                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
+                byteArray[i] = Convert.ToByte(byteHex, 16);
             }
 
-            return -1; 
+            return BitConverter.ToInt32(byteArray, 0);
+        }
+
+        private float ConvertLittleEndianHexToFloat(string hexString)
+        {
+            int byteCount = (hexString.Length + 1) / 2;
+            byte[] byteArray = new byte[byteCount];
+
+            for (int i = 0; i < byteCount; i++)
+            {
+                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
+                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
+                byteArray[i] = Convert.ToByte(byteHex, 16);
+            }
+
+            return BitConverter.ToSingle(byteArray, 0);
+        }
+
+        private void SetSelectecTag()
+        {
+            if (Tags == null) return;
+
+            List<string> tagNames = Tags.Keys.ToList();
+            tagNames.Add("None");
+
+            InputValueWindow inputValueWindow = new InputValueWindow("Select Tag", "List", tagNames.ToArray(), false, selectedItem: SelectedTag);
+            if (inputValueWindow.ShowDialog() == DialogResult.OK)
+            {
+                object retrievedValue = inputValueWindow.Value;
+
+                if (inputValueWindow.Value != null && retrievedValue.ToString() != "None")
+                {
+                    SelectedTag = retrievedValue.ToString();
+                } else
+                {
+                    SelectedTag = null;
+                }
+            }
+        }
+
+        private void CfgBinEditorWindow_Load(object sender, EventArgs e)
+        {
+            Tags = new Dictionary<string, List<Tag>>();
+
+            if (File.Exists("./MyTags.txt"))
+            {
+                Tags = ImportTags("./MyTags.txt");
+            }
+
+            if (File.Exists("./MyIDs.txt"))
+            {
+                IDs = ImportIDs("./MyIDs.txt");
+            }
+
+            variablesDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
 
         private void OpenToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            openFileDialog1.Filter = "Level 5 Bin files (*.bin)|*.bin";
+            openFileDialog1.FileName = "";
+            openFileDialog1.Filter = "Level 5 Bin files (*.bin;*.npcbin)|*.bin;*.npcbin";
             openFileDialog1.RestoreDirectory = true;
 
             if (openFileDialog1.ShowDialog() == DialogResult.OK)
@@ -354,124 +339,36 @@ namespace CfgBinEditor
                 variablesDataGridView.Rows.Clear();
 
                 CfgBinFileOpened = new CfgBin(new FileStream(openFileDialog1.FileName, FileMode.Open, FileAccess.Read));
-                DrawTreeView();
+                SetSelectecTag();
+                DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
                 FillStrings();
 
+                searchToolStripMenuItem.Enabled = true;
                 saveToolStripMenuItem.Enabled = true;
                 variablesDataGridView.Enabled = true;
                 stringsDataGridView.Enabled = true;
             }
         }
 
-        private void TreeView1_AfterSelect(object sender, TreeViewEventArgs e)
+        private void NewStripMenuItem_Click(object sender, EventArgs e)
         {
-            TreeNode selectedNode = e.Node;
-            string firstSelectedNodeText = e.Node.Text;
-
-            List<TreeNode> parentNodes = new List<TreeNode>();
-
-            while (selectedNode.Parent != null)
+            InputValueWindow inputValueWindow = new InputValueWindow("New File", "String", "", false);
+            if (inputValueWindow.ShowDialog() == DialogResult.OK)
             {
-                parentNodes.Add(selectedNode.Parent);
-                selectedNode = selectedNode.Parent;
+                CfgBinFileOpened = new CfgBin();
+                SetSelectecTag();
+
+                object retrievedValue = inputValueWindow.Value;
+                TreeNode rootNode = new TreeNode(retrievedValue.ToString());
+                rootNode.Expand();
+                rootNode.ContextMenuStrip = contextMenuStrip3;
+                treeView1.Nodes.Add(rootNode);
+
+                searchToolStripMenuItem.Enabled = true;
+                saveToolStripMenuItem.Enabled = true;
+                variablesDataGridView.Enabled = true;
+                stringsDataGridView.Enabled = true;
             }
-
-            Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-            for (int i = parentNodes.Count - 1; i >= 0; i--)
-            {
-                TreeNode node = parentNodes[i];
-                if (selectedEntry.ContainsKey(node.Text))
-                {
-                    selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                }
-            }
-
-            if (firstSelectedNodeText != Path.GetFileNameWithoutExtension(openFileDialog1.FileName))
-            {
-                DrawVariablesDataGridView(firstSelectedNodeText, selectedEntry);
-            }
-        }
-
-        private void TreeView1_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right)
-            {
-                SelectedRightClickTreeNode = e.Node;
-            }
-        }
-
-        private void AddEntryToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (SelectedRightClickTreeNode != null)
-            {
-                TreeNode selectedNode = SelectedRightClickTreeNode;
-
-                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
-
-                while (selectedNode.Parent != null)
-                {
-                    pathNodes.Add(selectedNode.Parent);
-                    selectedNode = selectedNode.Parent;
-                }
-
-                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-                for (int i = pathNodes.Count - 1; i >= 0; i--)
-                {
-                    TreeNode node = pathNodes[i];
-                    
-                    if (selectedEntry.ContainsKey(node.Text))
-                    {
-                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                    }
-                }
-
-                var firstItem = selectedEntry.ElementAt(0);
-
-                if (firstItem.Value.GetType() != typeof(List<CfgBinSupport.Variable>))
-                {
-                    string entryName = string.Join("", firstItem.Key.Take(firstItem.Key.LastIndexOf('_')));
-                    selectedEntry.Add(entryName + "_" + (selectedEntry.Count), firstItem.Value);
-                    MessageBox.Show(entryName + "_" + (selectedEntry.Count - 1) + " has been added");
-                } else
-                {
-                    // Info
-
-                    string entryName = string.Join("", firstItem.Key.Take(firstItem.Key.LastIndexOf('_')));
-                    List<CfgBinSupport.Variable> variables = firstItem.Value as List<CfgBinSupport.Variable>;
-                    List<CfgBinSupport.Variable> newVariables = new List<CfgBinSupport.Variable>();
-
-                    for (int i = 0; i < variables.Count; i++)
-                    {
-                        if (variables[i].Type == CfgBinSupport.Type.String)
-                        {
-                            newVariables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.String, -1));
-                        } else
-                        {
-                            newVariables.Add(new CfgBinSupport.Variable(variables[i].Type, 0));
-                        }
-                    }
-
-                    selectedEntry.Add(entryName + "_" + (selectedEntry.Count), newVariables);
-                    MessageBox.Show(entryName + "_" + (selectedEntry.Count -1) + " has been added");
-                }
-
-                // Reset
-                SelectedItem = null;
-                SelectedEntry = null;
-                SelectedRightClickTreeNode = null;
-                variablesDataGridView.Rows.Clear();
-
-                // Reload
-                DrawTreeView();
-                treeView1.Focus();
-            }
-        }
-
-        private void RemoveEntryToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-
         }
 
         private void SaveToolStripMenuItem_Click(object sender, EventArgs e)
@@ -486,64 +383,299 @@ namespace CfgBinEditor
             }
         }
 
-        private void VariableDataGridView_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
+        private void SearchToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            string type = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[1].Value.ToString();
-            bool showAsHex = Convert.ToBoolean(variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[3].Value);
+            SearchWindow searchWindow = new SearchWindow(IDs, CfgBinFileOpened);
 
-            if (variablesDataGridView.CurrentCell.ColumnIndex == 2)
+            if (searchWindow.ShowDialog() == DialogResult.OK)
             {
-                TextBox textBox = e.Control as TextBox;
-                textBox.TextChanged -= null;
+                List<Entry> retrievedValue = searchWindow.MatchesEntries;
 
-                if (showAsHex)
+                if (retrievedValue != null & retrievedValue.Count > 0)
                 {
-                    textBox.TextChanged += (s, eventArgs) =>
-                    {
-                        string hexString = textBox.Text;
-                        if (hexString.Length > 8)
-                            hexString = hexString.Substring(hexString.Length - 8);
-
-                        if (!IsHexDigit(hexString))
-                        {
-                            hexString = hexString.Length > 0 ? hexString.Substring(0, hexString.Length - 1) : "";
-                        }
-
-                        textBox.Text = hexString;
-                        textBox.SelectionStart = textBox.Text.Length;
-                    };
-                } else if (type == "Int" || type == "Unknown")
-                {
-                    textBox.KeyPress += (s, eventArgs) =>
-                    {
-                        if ((!char.IsDigit(eventArgs.KeyChar) && eventArgs.KeyChar != '-' && eventArgs.KeyChar != '\b') ||
-                            (eventArgs.KeyChar == '-' && textBox.Text.Length > 0) ||
-                            (textBox.Text.Length >= 12)) // Max length of characters for "-4294967295"
-                            eventArgs.Handled = true;
-                    };
+                    DrawTreeView(searchWindow.SearchValue.ToString(), retrievedValue);
+                    treeView1.SelectedNode = null;
                 }
-                else if (type == "Float")
+                else
                 {
-                    string decimalSeparator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
-
-                    if (!showAsHex)
-                    {
-                        textBox.KeyPress += (s, eventArgs) =>
-                        {
-                            if ((!char.IsDigit(eventArgs.KeyChar) && eventArgs.KeyChar != '-' && eventArgs.KeyChar != decimalSeparator[0] && eventArgs.KeyChar != '\b') ||
-                                (eventArgs.KeyChar == '-' && textBox.Text.Length > 0) ||
-                                (eventArgs.KeyChar == decimalSeparator[0] && textBox.Text.Contains(decimalSeparator)) ||
-                                (textBox.Text.Length >= 12)) // Max length of characters for "-4294967295"
-                                eventArgs.Handled = true;
-                        };
-                    }
+                    MessageBox.Show("No entries found");
                 }
             }
         }
 
-        private bool IsHexDigit(string input)
+        private void ExpandAllToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            return System.Text.RegularExpressions.Regex.IsMatch(input, @"\A\b[0-9a-fA-F]+\b\Z");
+            treeView1.ExpandAll();
+        }
+
+        private void CollapseAllToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            treeView1.CollapseAll();
+        }
+
+        private void ResetToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
+        }
+
+        private void TreeView1_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+            if (e.Node.Tag != null)
+            {
+                vsTabControl1.SelectedIndex = 0;
+                DrawVariablesDataGridView(e.Node);
+            } else
+            {
+                variablesDataGridView.Rows.Clear();
+            }
+        }
+
+        private void TreeView1_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                SelectedRightClickTreeNode = e.Node;
+            }
+        }
+
+        private void ImportItemToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode != null)
+            {
+                TreeNode selectedNode = SelectedRightClickTreeNode;
+                Entry entry = selectedNode.Tag as Entry;
+
+                openFileDialog3.FileName = "";
+                openFileDialog3.Filter = "Level 5 Bin files (*.bin)|*.bin";
+                openFileDialog3.RestoreDirectory = true;
+
+                if (openFileDialog3.ShowDialog() == DialogResult.OK)
+                {
+                    CfgBin newCfgBin = new CfgBin(new FileStream(openFileDialog3.FileName, FileMode.Open, FileAccess.Read));
+
+                    if (newCfgBin != null)
+                    {
+                        Dictionary<int, int> newOffset = new Dictionary<int, int>();
+                        Dictionary<int, string> newStrings = new Dictionary<int, string>();
+
+                        // Insert new strings
+                        foreach (KeyValuePair<int, string> newString in newCfgBin.Strings)
+                        {
+                            CfgBinFileOpened.InsertStrings(newString.Value);
+                            int lastOffset = CfgBinFileOpened.Strings.Keys.Max();
+
+                            newOffset.Add(newString.Key, lastOffset);
+                            newStrings.Add(lastOffset, newString.Value);
+                        }
+
+                        // Get all entries names
+                        Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
+                        foreach (var myEntry in CfgBinFileOpened.Entries)
+                        {
+                            myEntry.GetEntryNameOccurrences(nameOccurrences);
+                        }
+
+                        // Update import entries names
+                        foreach (var newEntry in newCfgBin.Entries)
+                        {
+                            newEntry.UpdateEntryNames(nameOccurrences);
+                            newEntry.UpdateString(newOffset, newStrings);
+
+                            if (entry != null)
+                            {
+                                entry.Children.Add(newEntry);
+                            } else
+                            {
+                                CfgBinFileOpened.Entries.Add(newEntry);
+                            }
+                       
+                            selectedNode.Nodes.Add(CreateTreeNode(newEntry));
+                        }
+
+                        stringsDataGridView.Rows.Clear();
+                        FillStrings();
+
+                        // Trigger update event
+                        if (vsTabControl1.SelectedIndex == 1)
+                        {
+                            DrawVariablesDataGridView(treeView1.SelectedNode);
+                        }
+
+                        MessageBox.Show(Path.GetFileName(openFileDialog3.FileName) + " has been imported on " + SelectedRightClickTreeNode.Text);
+                    }
+                }
+
+                // Reset
+                SelectedRightClickTreeNode = null;
+            }
+        }
+
+        private void ExportItemToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode != null)
+            {
+                TreeNode selectedNode = SelectedRightClickTreeNode;
+                Entry entry = selectedNode.Tag as Entry;
+
+                saveFileDialog2.Filter = "Level 5 Bin files (*.bin)|*.bin";
+                saveFileDialog2.RestoreDirectory = true;
+                saveFileDialog2.FileName = SelectedRightClickTreeNode.Text;
+
+                if (saveFileDialog2.ShowDialog() == DialogResult.OK)
+                {
+                    byte[] encodedData = entry.EntryToBin();
+
+                    if (encodedData != null && encodedData.Length > 0)
+                    {
+                        File.WriteAllBytes(saveFileDialog2.FileName, encodedData);
+                        MessageBox.Show(Path.GetFileName(saveFileDialog2.FileName) + " saved!");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Error encoding data or no data to save.");
+                    }
+                }
+
+                // Reset
+                SelectedRightClickTreeNode = null;
+            }
+        }
+
+        private void RemoveEntryToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode != null)
+            {
+                TreeNode selectedNode = SelectedRightClickTreeNode;
+                Entry entry = selectedNode.Tag as Entry;
+
+                treeView1.SelectedNode = treeView1.Nodes[0];
+
+                CfgBinFileOpened.Entries.Remove(entry);
+                selectedNode.Remove();
+
+                // Reset
+                SelectedRightClickTreeNode = null;
+            }
+        }
+
+        private void ReplaceItemToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode != null)
+            {
+                TreeNode selectedNode = SelectedRightClickTreeNode;
+                Entry entry = selectedNode.Tag as Entry;
+
+                openFileDialog4.FileName = "";
+                openFileDialog4.Filter = "Level 5 Bin files (*.bin)|*.bin";
+                openFileDialog4.RestoreDirectory = true;
+
+                if (openFileDialog4.ShowDialog() == DialogResult.OK)
+                {
+                    CfgBin newCfgBin = new CfgBin(new FileStream(openFileDialog4.FileName, FileMode.Open, FileAccess.Read));
+
+                    if (newCfgBin != null)
+                    {
+                        TreeNode newNode = null;
+                        Dictionary<int, int> newOffset = new Dictionary<int, int>();
+                        Dictionary<int, string> newStrings = new Dictionary<int, string>();
+
+                        // Insert new strings
+                        foreach (KeyValuePair<int, string> newString in newCfgBin.Entries[0].GetStrings())
+                        {
+                            CfgBinFileOpened.InsertStrings(newString.Value);
+                            int lastOffset = CfgBinFileOpened.Strings.Keys.Max();
+
+                            newOffset.Add(newString.Key, lastOffset);
+                            newStrings.Add(lastOffset, newString.Value);
+                        }
+
+                        // Get all entries names
+                        Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
+                        foreach (var myEntry in CfgBinFileOpened.Entries)
+                        {
+                            myEntry.GetEntryNameOccurrences(nameOccurrences);
+                        }
+
+                        // Update import entries names & strings
+                        newCfgBin.Entries[0].UpdateEntryNames(nameOccurrences);
+                        newCfgBin.Entries[0].UpdateString(newOffset, newStrings);
+                        newNode = CreateTreeNode(newCfgBin.Entries[0]);
+
+                        entry = newCfgBin.Entries[0];
+
+                        // Replace the old node with the new node
+                        TreeNode parent = SelectedRightClickTreeNode.Parent;
+                        if (parent != null)
+                        {
+                            int index = parent.Nodes.IndexOf(SelectedRightClickTreeNode);
+                            parent.Nodes.Remove(SelectedRightClickTreeNode);
+                            parent.Nodes.Insert(index, newNode);
+                        }
+                        else
+                        {
+                            // If there's no parent, it's the root node
+                            treeView1.Nodes.Remove(SelectedRightClickTreeNode);
+                            treeView1.Nodes.Add(newNode);
+                        }
+
+                        // Select the new node
+                        treeView1.SelectedNode = newNode;
+
+                        stringsDataGridView.Rows.Clear();
+                        FillStrings();
+
+                        // Trigger update event
+                        if (vsTabControl1.SelectedIndex == 1)
+                        {
+                            DrawVariablesDataGridView(treeView1.SelectedNode);
+                        }
+
+                        MessageBox.Show(SelectedRightClickTreeNode.Text + " has been replaced by " + Path.GetFileName(openFileDialog4.FileName));
+                    }
+                }
+
+                // Reset
+                SelectedRightClickTreeNode = null;
+            }
+        }
+
+        private void DuplicateStripMenuItem1_Click(object sender, EventArgs e)
+        {
+            if (SelectedRightClickTreeNode == null) return;
+
+            TreeNode selectedNode = SelectedRightClickTreeNode;
+            TreeNode parentNode = SelectedRightClickTreeNode.Parent;
+
+            Entry entry = selectedNode.Tag as Entry;
+            Entry entryParent = selectedNode.Tag as Entry;
+
+            byte[] encodedData = entry.EntryToBin();
+            MemoryStream memoryStream = new MemoryStream(encodedData);
+
+            CfgBin newCfgBin = new CfgBin(memoryStream);
+
+            if (newCfgBin != null)
+            {
+                // Get all entries names
+                Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
+                foreach (var myEntry in CfgBinFileOpened.Entries)
+                {
+                    myEntry.GetEntryNameOccurrences(nameOccurrences);
+                }
+
+                // Update import entries names
+                foreach (var newEntry in newCfgBin.Entries)
+                {
+                    newEntry.UpdateEntryNames(nameOccurrences);
+                    entryParent.Children.Add(newEntry);
+                    parentNode.Nodes.Add(CreateTreeNode(newEntry));
+                }
+
+                MessageBox.Show(SelectedRightClickTreeNode.Text + " has been duplicated!");
+            }
+
+            // Reset
+            SelectedRightClickTreeNode = null;
         }
 
         private void VariableDataGridView_CurrentCellDirtyStateChanged(object sender, EventArgs e)
@@ -562,8 +694,9 @@ namespace CfgBinEditor
         {
             if (VariblesDataGridEditInProgress)
             {
-                int index = e.RowIndex;
-                List<CfgBinSupport.Variable> variables = SelectedEntry[SelectedItem] as List<CfgBinSupport.Variable>;
+                Entry entry = treeView1.SelectedNode.Tag as Entry;
+
+                variablesDataGridView.Rows[e.RowIndex].Cells[2].ReadOnly = true;
 
                 string type = variablesDataGridView.Rows[e.RowIndex].Cells[1].Value.ToString();
                 object value = variablesDataGridView.Rows[e.RowIndex].Cells[2].Value;
@@ -573,35 +706,11 @@ namespace CfgBinEditor
                 {
                     VariblesDataGridEditInProgress = false;
 
-                    if (type == "Int" || type == "Unknown")
+                    if (type == "Float")
                     {
                         if (showAsHex)
                         {
-                            variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
-                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
-                        }
-                        else
-                        {
-                            try
-                            {
-                                int convertedValue = Convert.ToInt32(value);
-                                variables[index].Value = convertedValue;
-                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
-                            }
-                            catch (FormatException)
-                            {
-                                variables[index].Value = 0;
-                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = 0;
-                            }
-                        }
-
-                        variables[index].Type = CfgBinSupport.Type.Int;
-                    }
-                    else if (type == "Float")
-                    {
-                        if (showAsHex)
-                        {
-                            variables[index].Value = ConvertLittleEndianHexToFloat(value.ToString());
+                            entry.Variables[e.RowIndex].Value = ConvertLittleEndianHexToFloat(value.ToString());
                             variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToFloat(value.ToString()).ToString("X8");
                         }
                         else
@@ -609,89 +718,68 @@ namespace CfgBinEditor
                             try
                             {
                                 float convertedValue = Convert.ToSingle(value);
-                                variables[index].Value = convertedValue;
+                                entry.Variables[e.RowIndex].Value = convertedValue;
                                 variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
                             }
                             catch (FormatException)
                             {
-                                variables[index].Value = 0f;
+                                entry.Variables[e.RowIndex].Value = 0f;
                                 variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = 0f;
                             }
                         }
 
-                        variables[index].Type = CfgBinSupport.Type.Float;
+                        entry.Variables[e.RowIndex].Type = Level5.Logic.Type.Float;
                     }
                     else if (type == "String")
                     {
                         if (showAsHex)
                         {
-                            variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
+                            entry.Variables[e.RowIndex].Value = ConvertLittleEndianHexToInt(value.ToString());
                             variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
                         }
                         else
                         {
-                            variables[index].Value = value.ToString();
+                            entry.Variables[e.RowIndex].Value = value.ToString();
                             variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = value.ToString();
                         }
 
-                        variables[index].Type = CfgBinSupport.Type.String;
+                        entry.Variables[e.RowIndex].Type = Level5.Logic.Type.String;
                     }
-                }
-                else if (e.ColumnIndex == 2)
-                {
-                    if (type == "Int" || type == "Unknown")
+                    else
                     {
                         if (showAsHex)
                         {
-                            variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
-                        } else
-                        {
-                            variables[index].Value = value;
-                        }
-                    } 
-                    else if (type == "Float")
-                    {
-                        if (showAsHex)
-                        {
-                            variables[index].Value = ConvertLittleEndianHexToFloat(value.ToString());
+                            entry.Variables[e.RowIndex].Value = ConvertLittleEndianHexToInt(value.ToString());
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString()).ToString("X8");
                         }
                         else
                         {
-                            variables[index].Value = value;
+                            try
+                            {
+                                int convertedValue = Convert.ToInt32(value);
+                                entry.Variables[e.RowIndex].Value = convertedValue;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = convertedValue;
+                            }
+                            catch (FormatException)
+                            {
+                                entry.Variables[e.RowIndex].Value = 0;
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = 0;
+                            }
                         }
-                    } 
-                    else if (type == "String")
-                    {
-                        if (showAsHex)
-                        {
-                            variables[index].Value = ConvertLittleEndianHexToInt(value.ToString());
-                        }
-                        else
-                        {
-                            CfgBinFileOpened.UpdateStrings((int)variables[index].Value, value.ToString());
-                        }
+
+                        entry.Variables[e.RowIndex].Type = Level5.Logic.Type.Int;
                     }
                 }
                 else if (e.ColumnIndex == 3)
                 {
                     VariblesDataGridEditInProgress = false;
 
-                    if (type == "Int" || type == "Unknown")
-                    {
-                        if (showAsHex)
-                        {
-                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32(value).ToString("X8");
-                        }
-                        else
-                        {
-                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(value.ToString());
-                        }                 
-                    }
-                    else if (type == "Float")
+                    if (type == "Float")
                     {
                         if (showAsHex)
                         {
                             byte[] byteArray = BitConverter.GetBytes((float)value);
+                            Array.Reverse(byteArray);
                             variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = BitConverter.ToString(byteArray).Replace("-", "");
                         }
                         else
@@ -701,127 +789,176 @@ namespace CfgBinEditor
                     }
                     else if (type == "String")
                     {
+                        OffsetTextPair offsetTextPair = entry.Variables[e.RowIndex].Value as OffsetTextPair;
+
                         if (showAsHex)
                         {
-                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32((int)variables[index].Value).ToString("X8");
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = Convert.ToInt32(offsetTextPair.Offset).ToString("X8");
                         }
                         else
                         {
-                            if (CfgBinFileOpened.Strings.ContainsKey((int)variables[index].Value)) 
+                            if (offsetTextPair.Text != null)
                             {
-                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = CfgBinFileOpened.Strings[(int)variables[index].Value];
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = offsetTextPair.Text;
+                            } else
+                            {
+                                variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = "";
                             }
                         }
                     }
-                }
-
-                VariblesDataGridEditInProgress = false; // Réinitialisez le drapeau après le traitement
-            }        
-        }
-
-        private int ConvertLittleEndianHexToInt(string hexString)
-        {
-            int byteCount = (hexString.Length + 1) / 2; // Calcul du nombre d'octets nécessaires
-            byte[] byteArray = new byte[byteCount];
-
-            for (int i = 0; i < byteCount; i++)
-            {
-                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
-                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
-                byteArray[i] = Convert.ToByte(byteHex, 16);
-            }
-
-            return BitConverter.ToInt32(byteArray, 0);
-        }
-
-        private float ConvertLittleEndianHexToFloat(string hexString)
-        {
-            int byteCount = (hexString.Length + 1) / 2; // Calcul du nombre d'octets nécessaires
-            byte[] byteArray = new byte[byteCount];
-
-            for (int i = 0; i < byteCount; i++)
-            {
-                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
-                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
-                byteArray[i] = Convert.ToByte(byteHex, 16);
-            }
-
-            Array.Reverse(byteArray); // Inverser l'ordre des octets pour little endian
-
-            return BitConverter.ToSingle(byteArray, 0);
-        }
-
-        private void DuplicateStripMenuItem1_Click(object sender, EventArgs e)
-        {
-            if (SelectedRightClickTreeNode != null)
-            {
-                TreeNode selectedNode = SelectedRightClickTreeNode;
-
-                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
-
-                while (selectedNode.Parent != null)
-                {
-                    pathNodes.Add(selectedNode.Parent);
-                    selectedNode = selectedNode.Parent;
-                }
-
-                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-                for (int i = pathNodes.Count - 1; i >= 1; i--)
-                {
-                    TreeNode node = pathNodes[i];
-
-                    if (selectedEntry.ContainsKey(node.Text))
+                    else
                     {
-                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                    }
-                }
+                        int myInt = Convert.ToInt32(entry.Variables[e.RowIndex].Value);
 
-                var selectedItem = selectedEntry[SelectedRightClickTreeNode.Text];
-
-                if (selectedItem.GetType() == typeof(List<CfgBinSupport.Variable>))
-                {
-                    string newName = string.Join("", SelectedRightClickTreeNode.Text.Take(SelectedRightClickTreeNode.Text.LastIndexOf('_'))) + "_";
-
-                    List<int> numbers = selectedEntry.Keys.Select(s =>
-                    {
-                        string[] parts = s.Split('_');
-                        if (parts.Length > 0 && int.TryParse(parts.Last(), out int num))
+                        if (showAsHex)
                         {
-                            return num;
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = myInt.ToString("X8");
                         }
-                        return -1;
-                    }).OrderBy(n => n).ToList();
-
-                    int missingNumber = FindMissingNumber(numbers);
-                    
-                    if (missingNumber != -1)
-                    {
-                        newName += missingNumber;
-                    } else
-                    {
-                        newName += (numbers.Any() ? numbers.Last() + 1 : 1);
+                        else
+                        {
+                            variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = ConvertLittleEndianHexToInt(myInt.ToString("X8"));
+                        }
                     }
-
-                    List<CfgBinSupport.Variable> newVariables = new List<CfgBinSupport.Variable>();
-                    List<CfgBinSupport.Variable> variables = selectedItem as List<CfgBinSupport.Variable>;                 
-
-                    for (int i = 0; i < variables.Count; i++)
-                    {
-                        newVariables.Add(new CfgBinSupport.Variable(variables[i]));
-                    }
-
-                    selectedEntry.Add(newName, newVariables);
-
-                    TreeNode newNode = pathNodes[1].Nodes.Add(newName);
-                    newNode.EnsureVisible();
-                    treeView1.SelectedNode = newNode;
-                    
-                    MessageBox.Show(SelectedRightClickTreeNode.Text + " has been duplicated to " + newName);         
                 }
 
-                // Reset
-                SelectedRightClickTreeNode = null;
+                VariblesDataGridEditInProgress = false;
+            }
+        }
+
+        private void VariablesDataGridView_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.ColumnIndex == 2)
+            {
+                Entry entry = treeView1.SelectedNode.Tag as Entry;
+
+                variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].ReadOnly = true;
+
+                object value = null;
+                string name = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[0].Value.ToString();
+                string type = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[1].Value.ToString();
+                bool showAsHex = Convert.ToBoolean(variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[3].Value);
+
+                if (type == "String")
+                {
+                    OffsetTextPair offsetTextPair = entry.Variables[variablesDataGridView.CurrentRow.Index].Value as OffsetTextPair;
+
+                    if (showAsHex)
+                    {
+                        value = offsetTextPair.Offset.ToString("X8");
+                    }
+                    else
+                    {
+                        value = offsetTextPair.Text;
+                    }
+                }
+                else if (type == "Float")
+                {
+                    float myFloat = Convert.ToSingle(entry.Variables[variablesDataGridView.CurrentRow.Index].Value);
+
+                    if (showAsHex)
+                    {
+                        byte[] byteArray = BitConverter.GetBytes((float)myFloat);
+                        Array.Reverse(byteArray);
+                        value = BitConverter.ToString(byteArray).Replace("-", "");
+                    }
+                    else
+                    {
+                        value = myFloat;
+                    }
+                }
+                else
+                {
+                    int myInt = Convert.ToInt32(entry.Variables[e.RowIndex].Value);
+
+                    if (showAsHex)
+                    {
+                        value = myInt.ToString("X8");
+                    }
+                    else
+                    {
+                        value = myInt;
+                    }
+                }
+             
+                InputValueWindow inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs);
+
+                if (inputValueWindow.ShowDialog() == DialogResult.OK)
+                {
+                    object retrievedValue = inputValueWindow.Value;
+
+                    if (type == "String")
+                    {
+                        OffsetTextPair offsetTextPair = entry.Variables[variablesDataGridView.CurrentRow.Index].Value as OffsetTextPair;
+
+                        if (showAsHex)
+                        {
+                            int newOffset = Convert.ToInt32(retrievedValue);
+
+                            if (CfgBinFileOpened.Strings.ContainsKey(newOffset))
+                            {
+                                offsetTextPair.Offset = newOffset;
+                                offsetTextPair.Text = CfgBinFileOpened.Strings[newOffset];
+                            }
+                            else
+                            {
+                                offsetTextPair.Offset = -1;
+                                offsetTextPair.Text = null;
+                            }
+
+                            variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = offsetTextPair.Offset.ToString("X8");
+                        }
+                        else
+                        {
+                            CfgBinFileOpened.UpdateStrings(offsetTextPair.Offset, retrievedValue.ToString());              
+                            variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = retrievedValue.ToString();
+
+                            stringsDataGridView.Rows.Clear();
+                            FillStrings();
+                        }
+                    }
+                    else if (type == "Float")
+                    {
+                        entry.Variables[variablesDataGridView.CurrentRow.Index].Value = Convert.ToSingle(retrievedValue);
+
+                        if (showAsHex)
+                        {
+                            byte[] byteArray = BitConverter.GetBytes(Convert.ToSingle(retrievedValue));
+                            Array.Reverse(byteArray);
+
+                            variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = BitConverter.ToString(byteArray).Replace("-", "");
+                        }
+                        else
+                        {
+                            variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = Convert.ToSingle(retrievedValue);
+                        }
+                    }
+                    else
+                    {
+                        entry.Variables[variablesDataGridView.CurrentRow.Index].Value = Convert.ToInt32(retrievedValue);
+
+                        if (IDs != null)
+                        {
+                            DrawVariablesDataGridView(treeView1.SelectedNode);
+
+                            variablesDataGridView.Rows[e.RowIndex].Cells[e.ColumnIndex].Selected = true;
+                            variablesDataGridView.FirstDisplayedScrollingRowIndex = e.RowIndex;
+                            variablesDataGridView.FirstDisplayedScrollingColumnIndex = e.ColumnIndex;
+                        } else
+                        {
+                            if (showAsHex)
+                            {
+                                variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = Convert.ToInt32(retrievedValue).ToString("X8");
+                            }
+                            else
+                            {
+                                variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = Convert.ToInt32(retrievedValue);
+                            }
+                        }                    
+                    }
+                }
+
+                variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].ReadOnly = false;
+                variablesDataGridView.Focus();
             }
         }
 
@@ -830,261 +967,67 @@ namespace CfgBinEditor
             variablesDataGridView.AutoResizeColumns();
         }
 
-        private void StringsDataGridView_RowsAdded(object sender, DataGridViewRowsAddedEventArgs e)
+        private void StringsDataGridView_CellClick(object sender, DataGridViewCellEventArgs e)
         {
-            StringsNewRowBeingAdded = true;
-        }
+            if (e.ColumnIndex != 1) return;
 
-        private void StringsDataGridView_RowValidating(object sender, DataGridViewCellCancelEventArgs e)
-        {
-            if (!StringsNewRowBeingAdded) return;
+            stringsDataGridView.Rows[e.RowIndex].Cells[1].ReadOnly = true;
 
-            int offset = 0;
-            string newText = stringsDataGridView.Rows[stringsDataGridView.RowCount - 2].Cells[1].Value.ToString();
-
-            if (CfgBinFileOpened.Strings.Count > 0)
+            if (e.RowIndex < stringsDataGridView.RowCount -1)
             {
-                KeyValuePair<int, string> lastItem = CfgBinFileOpened.Strings.ElementAt(CfgBinFileOpened.Strings.Count - 1);
-                offset = lastItem.Key + Encoding.UTF8.GetBytes(lastItem.Value).Length + 1;
+                // Edit current string
+
+                string name = "Edit String " + e.RowIndex;
+                string type = "String";
+                object value = stringsDataGridView.Rows[e.RowIndex].Cells[1].Value;
+                bool showAsHex = false;
+
+                InputValueWindow inputValueWindow = new InputValueWindow(name, type, value, showAsHex);
+                if (inputValueWindow.ShowDialog() == DialogResult.OK)
+                {
+                    object retrievedValue = inputValueWindow.Value;
+                    int offset = ConvertLittleEndianHexToInt(stringsDataGridView.Rows[e.RowIndex].Cells[0].Value.ToString());
+
+                    CfgBinFileOpened.UpdateStrings(offset, retrievedValue.ToString());
+
+                    BeginInvoke(new Action(() =>
+                    {
+                        stringsDataGridView.Rows.Clear();
+                        FillStrings();
+                    }));
+                }
+            } else
+            {
+                // Insert new string
+
+                string name = "Insert New String";
+                string type = "String";
+                object value = "";
+                bool showAsHex = false;
+
+                InputValueWindow inputValueWindow = new InputValueWindow(name, type, value, showAsHex);
+                if (inputValueWindow.ShowDialog() == DialogResult.OK)
+                {
+                    object retrievedValue = inputValueWindow.Value;
+                    CfgBinFileOpened.InsertStrings(retrievedValue.ToString());
+
+                    int lastOffset = CfgBinFileOpened.Strings.Keys.Max();
+                    stringsDataGridView.Rows.Add(lastOffset.ToString("X8"), retrievedValue.ToString());
+                }
             }
 
-            CfgBinFileOpened.InsertStrings(offset, newText);
-            stringsDataGridView.Rows[stringsDataGridView.RowCount - 2].Cells[0].Value = offset.ToString("X8");
-            StringsNewRowBeingAdded = false;
+            stringsDataGridView.Rows[e.RowIndex].Cells[1].ReadOnly = false;
         }
 
-        private void StringsDataGridView_CurrentCellDirtyStateChanged(object sender, EventArgs e)
+        private void VsTabControl1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (stringsDataGridView.IsCurrentCellDirty)
+            if (vsTabControl1.SelectedIndex != 0) return;
+
+            // Trigger update event
+            if (treeView1.SelectedNode != null && treeView1.SelectedNode.Tag != null)
             {
-                if (!StringsDataGridEditInProgress)
-                {
-                    StringsDataGridEditInProgress = true;
-                    stringsDataGridView.CommitEdit(DataGridViewDataErrorContexts.Commit);
-                }
-            }
-        }
-
-        private void StringsDataGridView_CellValidated(object sender, DataGridViewCellEventArgs e)
-        {
-            if (!StringsDataGridEditInProgress) return;
-
-            int offset = ConvertLittleEndianHexToInt(stringsDataGridView.Rows[e.RowIndex].Cells[0].Value.ToString());
-            string newText = stringsDataGridView.Rows[e.RowIndex].Cells[1].Value.ToString();
-            CfgBinFileOpened.UpdateStrings(offset, newText);
-            StringsDataGridEditInProgress = false;
-
-            BeginInvoke(new Action(() =>
-            {
-                stringsDataGridView.Rows.Clear();
-                FillStrings();
-            }));
-        }
-
-        private void VariablesDataGridView_CellValidated(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.ColumnIndex == 2)
-            {
-                BeginInvoke(new Action(() =>
-                {
-                    stringsDataGridView.Rows.Clear();
-                    FillStrings();
-                }));
-            }
-        }
-
-        private void SearchToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (SearchWindow == null || SearchWindow.IsDisposed)
-            {
-                SearchWindow = new SearchWindow(CfgBinFileOpened.Entries, CfgBinFileOpened.Strings, this);
-                SearchWindow.FormClosed += (s, args) => SearchWindow = null; // Reset the form instance when closed
-                SearchWindow.Show();
-            }
-            else
-            {
-                SearchWindow.Focus(); // Bring the existing form to the foreground
-            }
-        }
-
-        private void FiltredListBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (SearchWindow == null || SearchWindow.IsDisposed || SearchWindow.FiltredEntries == null || filtredListBox.SelectedIndex == -1) return;
-
-            DrawVariablesDataGridView(filtredListBox.SelectedItem.ToString(), (SearchWindow.FiltredEntries[filtredListBox.SelectedIndex].Item2 as Dictionary<string, object>));
-        }
-
-        private void ExportItemToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (SelectedRightClickTreeNode != null)
-            {
-                TreeNode selectedNode = SelectedRightClickTreeNode;
-
-                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
-
-                while (selectedNode.Parent != null)
-                {
-                    pathNodes.Add(selectedNode.Parent);
-                    selectedNode = selectedNode.Parent;
-                }
-
-                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-                for (int i = pathNodes.Count - 1; i >= 1; i--)
-                {
-                    TreeNode node = pathNodes[i];
-
-                    if (selectedEntry.ContainsKey(node.Text))
-                    {
-                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                    }
-                }
-
-                saveFileDialog2.Filter = "Level 5 Bin files (*.bin)|*.bin";
-                saveFileDialog2.RestoreDirectory = true;
-                saveFileDialog2.FileName = SelectedRightClickTreeNode.Text;
-
-                if (saveFileDialog2.ShowDialog() == DialogResult.OK)
-                {
-                    byte[] encodedData = CfgBinFileOpened.EncodeEntry(selectedEntry.FirstOrDefault(kvp => kvp.Key == SelectedRightClickTreeNode.Text));
-
-                    if (encodedData != null && encodedData.Length > 0)
-                    {
-                        File.WriteAllBytes(saveFileDialog2.FileName, encodedData);
-                        MessageBox.Show(Path.GetFileName(saveFileDialog2.FileName) + " saved!");
-                    }
-                    else
-                    {
-                        MessageBox.Show("Error encoding data or no data to save.");
-                    }
-                }
-
-                // Reset
-                SelectedRightClickTreeNode = null;
-            }
-        }
-
-        private void ToolStripMenuItem2_Click(object sender, EventArgs e)
-        {
-            if (SelectedRightClickTreeNode != null)
-            {
-                TreeNode selectedNode = SelectedRightClickTreeNode;
-
-                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
-
-                while (selectedNode.Parent != null)
-                {
-                    pathNodes.Add(selectedNode.Parent);
-                    selectedNode = selectedNode.Parent;
-                }
-
-                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-                for (int i = pathNodes.Count - 1; i >= 1; i--)
-                {
-                    TreeNode node = pathNodes[i];
-
-                    if (selectedEntry.ContainsKey(node.Text))
-                    {
-                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                    }
-                }
-
-                if (selectedEntry.Count > 0)
-                {
-                    if (SelectedItem == SelectedRightClickTreeNode.Text)
-                    {
-                        SelectedItem = null;
-                    }
-
-                    selectedEntry.Remove(SelectedRightClickTreeNode.Text);
-                    pathNodes[1].Nodes.Remove(SelectedRightClickTreeNode);
-
-                    pathNodes[1].Nodes[0].EnsureVisible();
-                    treeView1.SelectedNode = pathNodes[1].Nodes[0];
-                    
-                    MessageBox.Show(SelectedRightClickTreeNode.Text + " has been removed");
-                } 
-                else
-                {
-                    MessageBox.Show("Cannot delete the last element. Entry must have at least 1 element");
-                }
-
-                // Reset
-                SelectedRightClickTreeNode = null;
-            }
-        }
-
-        private void ImportItemToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (SelectedRightClickTreeNode != null)
-            {
-                TreeNode selectedNode = SelectedRightClickTreeNode;
-
-                List<TreeNode> pathNodes = new List<TreeNode>() { selectedNode };
-
-                while (selectedNode.Parent != null)
-                {
-                    pathNodes.Add(selectedNode.Parent);
-                    selectedNode = selectedNode.Parent;
-                }
-
-                Dictionary<string, object> selectedEntry = CfgBinFileOpened.Entries;
-
-                for (int i = pathNodes.Count - 1; i >= 1; i--)
-                {
-                    TreeNode node = pathNodes[i];
-
-                    if (selectedEntry.ContainsKey(node.Text))
-                    {
-                        selectedEntry = selectedEntry[node.Text] as Dictionary<string, object>;
-                    }
-                }
-
-                openFileDialog3.Filter = "Level 5 Bin files (*.bin)|*.bin";
-                openFileDialog3.RestoreDirectory = true;
-
-                selectedEntry = selectedEntry[SelectedRightClickTreeNode.Text] as Dictionary<string, object>;
-                string firstItemName = selectedEntry.Keys.ToArray()[0];
-
-                if (openFileDialog3.ShowDialog() == DialogResult.OK)
-                {
-                    string newName = string.Join("", firstItemName.Take(firstItemName.LastIndexOf('_'))) + "_";
-
-                    List<int> numbers = selectedEntry.Keys.Select(s =>
-                    {
-                        string[] parts = s.Split('_');
-                        if (parts.Length > 0 && int.TryParse(parts.Last(), out int num))
-                        {
-                            return num;
-                        }
-                        return -1;
-                    }).OrderBy(n => n).ToList();
-
-                    int missingNumber = FindMissingNumber(numbers);
-
-                    if (missingNumber != -1)
-                    {
-                        newName += missingNumber;
-                    }
-                    else
-                    {
-                        newName += (numbers.Any() ? numbers.Last() + 1 : 1);
-                    }
-
-                    selectedEntry.Add(newName, CfgBinFileOpened.ItemToListVariable(File.ReadAllBytes(openFileDialog3.FileName)));
-
-                    Console.WriteLine(newName);
-
-                    TreeNode newNode = pathNodes[0].Nodes.Add(newName);
-                    newNode.EnsureVisible();
-                    treeView1.SelectedNode = newNode;
-
-                    MessageBox.Show(newName + " has been imported on " + SelectedRightClickTreeNode.Text);
-                }
-
-                // Reset
-                SelectedRightClickTreeNode = null;
+                vsTabControl1.SelectedIndex = 0;
+                DrawVariablesDataGridView(treeView1.SelectedNode);
             }
         }
     }

@@ -1,18 +1,25 @@
 ﻿using System;
-using System.Linq;
-using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
-using CfgBinEditor.Tools;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using CfgBinEditor.Tools;
+using CfgBinEditor.Level5.Logic;
 
 namespace CfgBinEditor.Level5.Binary
 {
     public class CfgBin
     {
-        public Dictionary<string, object> Entries;
+        public List<Entry> Entries;
 
         public Dictionary<int, string> Strings;
+
+        public CfgBin()
+        {
+            Entries = new List<Entry>();
+            Strings = new Dictionary<int, string>();
+        }
 
         public CfgBin(Stream stream)
         {
@@ -49,9 +56,9 @@ namespace CfgBinEditor.Level5.Binary
 
                 writer.Seek(0x10);
 
-                foreach (KeyValuePair<string, object> entry in Entries)
+                foreach (Entry entry in Entries)
                 {
-                    writer.Write(EncodeEntry(entry));
+                    writer.Write(entry.EncodeEntry());
                 }
 
                 writer.WriteAlignment(0x10, 0xFF);
@@ -64,11 +71,15 @@ namespace CfgBinEditor.Level5.Binary
                     writer.WriteAlignment(0x10, 0xFF);
                 }
 
-                List<string> distinctEntry = GetUniqueKeys(Entries);
-                writer.Write(EncodeKeyTable(distinctEntry));
+                List<string> uniqueKeysList = Entries
+                    .SelectMany(entry => entry.GetUniqueKeys())
+                    .Distinct()
+                    .ToList();
 
-                writer.Write(new byte[5] {0x01, 0x74, 0x32, 0x62, 0xFE});
-                writer.Write(new byte[4] { 0x01, 0x01, 0x00, 0x01});
+                writer.Write(EncodeKeyTable(uniqueKeysList));
+
+                writer.Write(new byte[5] { 0x01, 0x74, 0x32, 0x62, 0xFE });
+                writer.Write(new byte[4] { 0x01, 0x01, 0x00, 0x01 });
                 writer.WriteAlignment();
 
                 writer.Seek(0);
@@ -89,296 +100,6 @@ namespace CfgBinEditor.Level5.Binary
             }
 
             return result;
-        }
-
-        private byte[] EncodeStrings(Dictionary<int, string> strings)
-        {
-            using (MemoryStream memoryStream = new MemoryStream())
-            {
-                using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
-                {
-                    foreach(KeyValuePair<int, string> kvp in strings)
-                    {
-                        writer.Write(Encoding.UTF8.GetBytes(kvp.Value));
-                        writer.Write((byte)0x00);
-                    }
-
-                    return memoryStream.ToArray();
-                }
-            }
-        }
-
-        public List<CfgBinSupport.Variable> ItemToListVariable(byte[] entryBuffer)
-        {
-            using (BinaryDataReader reader = new BinaryDataReader(entryBuffer))
-            {
-                uint crc32 = reader.ReadValue<uint>();
-
-                int paramCount = reader.ReadValue<byte>();
-                CfgBinSupport.Type[] paramTypes = new CfgBinSupport.Type[paramCount];
-                int paramIndex = 0;
-
-                for (int j = 0; j < (int)Math.Ceiling((double)paramCount / 4); j++)
-                {
-                    byte paramType = reader.ReadValue<byte>();
-                    for (int k = 0; k < 4; k++)
-                    {
-                        if (paramIndex < paramTypes.Length)
-                        {
-                            int tag = (paramType >> (2 * k)) & 3;
-
-                            switch (tag)
-                            {
-                                case 0:
-                                    paramTypes[paramIndex] = CfgBinSupport.Type.String;
-                                    break;
-                                case 1:
-                                    paramTypes[paramIndex] = CfgBinSupport.Type.Int;
-                                    break;
-                                case 2:
-                                    paramTypes[paramIndex] = CfgBinSupport.Type.Float;
-                                    break;
-                                default:
-                                    paramTypes[paramIndex] = CfgBinSupport.Type.Unknown;
-                                    break;
-                            }
-
-                            paramIndex++;
-                        }
-                    }
-                }
-
-                if ((Math.Ceiling((double)paramCount / 4) + 1) % 4 != 0)
-                {
-                    reader.Seek((uint)(reader.Position + 4 - (reader.Position % 4)));
-                }
-
-                List<CfgBinSupport.Variable> variables = new List<CfgBinSupport.Variable>();
-
-                for (int j = 0; j < paramCount; j++)
-                {
-                    if (paramTypes[j] == CfgBinSupport.Type.String)
-                    {
-                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.String, reader.ReadValue<int>()));
-                    }
-                    else if (paramTypes[j] == CfgBinSupport.Type.Int)
-                    {
-                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Int, reader.ReadValue<int>()));
-                    }
-                    else if (paramTypes[j] == CfgBinSupport.Type.Float)
-                    {
-                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Float, reader.ReadValue<float>()));
-                    }
-                    else if (paramTypes[j] == CfgBinSupport.Type.Unknown)
-                    {
-                        variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Unknown, reader.ReadValue<int>()));
-                    }
-                }
-
-                return variables;
-            }
-        }
-
-        private Dictionary<string, object> ParseEntries(int entriesCount, byte[] entriesBuffer, Dictionary<uint, string> keyTable)
-        {
-            var outputDict = new Dictionary<string, object>();
-            var stack = new Stack<Dictionary<string, object>>();
-            stack.Push(outputDict);
-
-            var nameIndices = new Dictionary<string, int>(); // New dictionary to store the current index for each name
-
-            using (BinaryDataReader reader = new BinaryDataReader(entriesBuffer))
-            {
-                int i = 0;
-
-                while (i < entriesCount)
-                {
-                    uint crc32 = reader.ReadValue<uint>();
-                    string name = keyTable[crc32];
-
-                    int paramCount = reader.ReadValue<byte>();
-                    CfgBinSupport.Type[] paramTypes = new CfgBinSupport.Type[paramCount];
-                    int paramIndex = 0;
-
-                    for (int j = 0; j < (int)Math.Ceiling((double)paramCount / 4); j++)
-                    {
-                        byte paramType = reader.ReadValue<byte>();
-                        for (int k = 0; k < 4; k++)
-                        {
-                            if (paramIndex < paramTypes.Length)
-                            {
-                                int tag = (paramType >> (2 * k)) & 3;
-
-                                switch (tag)
-                                {
-                                    case 0:
-                                        paramTypes[paramIndex] = CfgBinSupport.Type.String;
-                                        break;
-                                    case 1:
-                                        paramTypes[paramIndex] = CfgBinSupport.Type.Int;
-                                        break;
-                                    case 2:
-                                        paramTypes[paramIndex] = CfgBinSupport.Type.Float;
-                                        break;
-                                    default:
-                                        paramTypes[paramIndex] = CfgBinSupport.Type.Unknown;
-                                        break;
-                                }
-
-                                paramIndex++;
-                            }
-                        }
-                    }
-
-                    if ((Math.Ceiling((double)paramCount / 4) + 1) % 4 != 0)
-                    {
-                        reader.Seek((uint)(reader.Position + 4 - (reader.Position % 4)));
-                    }
-
-                    List<CfgBinSupport.Variable> variables = new List<CfgBinSupport.Variable>();
-
-                    for (int j = 0; j < paramCount; j++)
-                    {
-                        if (paramTypes[j] == CfgBinSupport.Type.String)
-                        {
-                            variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.String, reader.ReadValue<int>()));
-                        }
-                        else if (paramTypes[j] == CfgBinSupport.Type.Int)
-                        {
-                            variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Int, reader.ReadValue<int>()));
-                        }
-                        else if (paramTypes[j] == CfgBinSupport.Type.Float)
-                        {
-                            variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Float, reader.ReadValue<float>()));
-                        }
-                        else if (paramTypes[j] == CfgBinSupport.Type.Unknown)
-                        {
-                            variables.Add(new CfgBinSupport.Variable(CfgBinSupport.Type.Unknown, reader.ReadValue<int>()));
-                        }
-                    }
-
-                    if (name.EndsWith("_BEGIN"))
-                    {
-                        var key = name.Substring(0, name.Length - "_BEGIN".Length);
-
-                        // Retrieve the current index for this name, default to 0 if it's not present
-                        int index = nameIndices.TryGetValue(name, out int currentIndex) ? currentIndex : 0;
-
-                        var newDict = new Dictionary<string, object>();
-                        stack.Peek().Add(key + "_BEGIN_" + index, newDict);
-
-                        stack.Push(newDict);
-
-                        // Increment the index for this name
-                        nameIndices[name] = index + 1;
-                    } else if (name.EndsWith("_BEG"))
-                    {
-                        var key = name.Substring(0, name.Length - "_BEG".Length);
-
-                        // Retrieve the current index for this name, default to 0 if it's not present
-                        int index = nameIndices.TryGetValue(name, out int currentIndex) ? currentIndex : 0;
-
-                        var newDict = new Dictionary<string, object>();
-                        stack.Peek().Add(key + "_BEG_" + index, newDict);
-
-                        stack.Push(newDict);
-
-                        // Increment the index for this name
-                        nameIndices[name] = index + 1;
-                    }
-                    else if (name.EndsWith("_END"))
-                    {
-                        stack.Pop();
-                        nameIndices[name.Replace("_END", "")] = 0; // Reset the index for this name when encountering the "_END" marker
-                    }
-                    else
-                    {
-                        // Retrieve the current index for this name, default to 0 if it's not present
-                        int index = nameIndices.TryGetValue(name, out int currentIndex) ? currentIndex : 0;
-
-                        if (!stack.Peek().ContainsKey(name + "_" + index))
-                        {
-                            stack.Peek().Add(name + "_" + index, new List<CfgBinSupport.Variable>());
-                        }
-
-                        ((List<CfgBinSupport.Variable>)stack.Peek()[name + "_" + index]).AddRange(variables);
-
-                        // Increment the index for this name
-                        nameIndices[name] = index + 1;
-                    }
-
-                    i++;
-                }
-            }
-
-            return outputDict;
-        }
-
-        public byte[] EncodeEntry(KeyValuePair<string, object> entry)
-        {
-            using (MemoryStream memoryStream = new MemoryStream())
-            {
-                using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
-                {
-                    string entryName = string.Join("_", entry.Key.Split('_').Reverse().Skip(1).Reverse());
-                    writer.Write(Crc32.Compute(Encoding.UTF8.GetBytes(entryName)));
-                    List<CfgBinSupport.Type> types;
-
-                    if (entry.Value.GetType() == typeof(Dictionary<string, object>))
-                    {
-                        Dictionary<string, object> item = entry.Value as Dictionary<string, object>;
-
-                        Dictionary<string, int> distinctEntry = TransformAndCount(item);
-                        writer.Write((byte)distinctEntry.Count);
-
-                        types = Enumerable.Repeat(CfgBinSupport.Type.Int, distinctEntry.Count).ToList();
-                        writer.Write(EncodeTypes(types));
-
-
-                        foreach (int count in distinctEntry.Values)
-                        {
-                            writer.Write(count);
-                        }
-
-                        foreach (KeyValuePair<string, object> itemValue in item)
-                        {
-                            writer.Write(EncodeEntry(itemValue));
-                        }
-
-                        writer.Write(Crc32.Compute(Encoding.UTF8.GetBytes(entryName.Replace("BEGIN", "") + "END")));
-                        writer.Write(new byte[4] { 0x00, 0xFF, 0xFF, 0xFF });
-                    }
-                    else
-                    {
-                        List<CfgBinSupport.Variable> item = entry.Value as List<CfgBinSupport.Variable>;
-                        writer.Write((byte)item.Count);
-
-                        types = item.Select(x => x.Type).ToList();
-                        writer.Write(EncodeTypes(types));
-
-                        foreach (CfgBinSupport.Variable variable in item)
-                        {
-                            switch (variable.Type)
-                            {
-                                case CfgBinSupport.Type.String:
-                                    writer.Write(Convert.ToInt32(variable.Value));
-                                    break;
-                                case CfgBinSupport.Type.Int:
-                                    writer.Write(Convert.ToInt32(variable.Value));
-                                    break;
-                                case CfgBinSupport.Type.Float:
-                                    writer.Write(Convert.ToSingle(variable.Value));
-                                    break;
-                                default:
-                                    writer.Write(Convert.ToInt32(variable.Value));
-                                    break;
-                            }
-                        }
-                    }
-
-                    return memoryStream.ToArray();
-                }
-            }
         }
 
         private Dictionary<uint, string> ParseKeyTable(byte[] buffer)
@@ -405,6 +126,241 @@ namespace CfgBinEditor.Level5.Binary
             }
 
             return keyTable;
+        }
+
+        private List<Entry> ParseEntries(int entriesCount, byte[] entriesBuffer, Dictionary<uint, string> keyTable)
+        {
+            List<Entry> temp = new List<Entry>();
+            List<Entry> output = new List<Entry>();
+
+            // Get All entries
+            using (BinaryDataReader reader = new BinaryDataReader(entriesBuffer))
+            {
+                for (int i = 0; i < entriesCount; i++)
+                {
+                    uint crc32 = reader.ReadValue<uint>();
+                    string name = keyTable[crc32];
+
+                    int paramCount = reader.ReadValue<byte>();
+                    Logic.Type[] paramTypes = new Logic.Type[paramCount];
+                    int paramIndex = 0;
+
+                    for (int j = 0; j < (int)Math.Ceiling((double)paramCount / 4); j++)
+                    {
+                        byte paramType = reader.ReadValue<byte>();
+                        for (int k = 0; k < 4; k++)
+                        {
+                            if (paramIndex < paramTypes.Length)
+                            {
+                                int tag = (paramType >> (2 * k)) & 3;
+
+                                switch (tag)
+                                {
+                                    case 0:
+                                        paramTypes[paramIndex] = Logic.Type.String;
+                                        break;
+                                    case 1:
+                                        paramTypes[paramIndex] = Logic.Type.Int;
+                                        break;
+                                    case 2:
+                                        paramTypes[paramIndex] = Logic.Type.Float;
+                                        break;
+                                    default:
+                                        paramTypes[paramIndex] = Logic.Type.Unknown;
+                                        break;
+                                }
+
+                                paramIndex++;
+                            }
+                        }
+                    }
+
+                    if ((Math.Ceiling((double)paramCount / 4) + 1) % 4 != 0)
+                    {
+                        reader.Seek((uint)(reader.Position + 4 - (reader.Position % 4)));
+                    }
+
+                    List<Variable> variables = new List<Variable>();
+
+                    for (int j = 0; j < paramCount; j++)
+                    {
+                        if (paramTypes[j] == Logic.Type.String)
+                        {
+                            int offset = reader.ReadValue<int>();
+                            string text = null;
+
+                            if (offset != -1)
+                            {
+                                text = Strings[offset];
+                            }
+
+                            variables.Add(new Variable(Logic.Type.String, new OffsetTextPair(offset, text)));
+                        }
+                        else if (paramTypes[j] == Logic.Type.Int)
+                        {
+                            variables.Add(new Variable(Logic.Type.Int, reader.ReadValue<int>()));
+                        }
+                        else if (paramTypes[j] == Logic.Type.Float)
+                        {
+                            variables.Add(new Variable(Logic.Type.Float, reader.ReadValue<float>()));
+                        }
+                        else if (paramTypes[j] == Logic.Type.Unknown)
+                        {
+                            variables.Add(new Variable(Logic.Type.Unknown, reader.ReadValue<int>()));
+                        }
+                    }
+
+                    temp.Add(new Entry(name, variables));
+                }
+            }
+
+            // Reorganize entries
+            Dictionary<string, int> entriesKey = new Dictionary<string, int>();
+            for (int i = 0; i < temp.Count; i++)
+            {
+                string entryName = temp[i].Name;
+
+                if (!entriesKey.ContainsKey(entryName))
+                {
+                    entriesKey[entryName] = 0;
+                }
+
+                temp[i].Name = entryName + "_" + entriesKey[entryName];
+                entriesKey[entryName] += 1;
+            }
+
+            // Process entries
+            while (temp.Count > 0)
+            {
+                Entry rootEntry = ProcessEntry(temp);
+
+                if (rootEntry != null)
+                {
+                    output.Add(rootEntry);
+                }
+            }
+
+            return output;
+        }
+
+        private Entry ProcessEntry(List<Entry> entries, Entry parentEntry = null)
+        {
+            // All entries have been processed
+            if (entries.Count == 0)
+            {
+                return null;
+            }
+
+            Entry currentEntry = entries[0];
+            entries.RemoveAt(0);
+
+            // Get the node name by splitting from the last "_"
+            string[] nameParts = currentEntry.Name.Split('_');
+            string nodeType = nameParts[nameParts.Count() - 2];
+            string nodeName = string.Join("_", nameParts.Take(nameParts.Length - 1));
+
+            if (nodeType.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) || nodeName.Equals("PTREE", StringComparison.OrdinalIgnoreCase))
+            {
+                // It's a BEGIN node
+                parentEntry = currentEntry;
+
+                while (entries.Count > 0)
+                {
+                    Entry childEntry = ProcessEntry(entries, parentEntry);
+
+                    if (childEntry != null)
+                    {
+                        parentEntry.Children.Add(childEntry);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                return parentEntry;
+            }
+            else if (nodeType.Equals("BEG", StringComparison.OrdinalIgnoreCase))
+            {
+                // It's a BEGIN node
+                parentEntry = currentEntry;
+
+                while (entries.Count > 0)
+                {
+                    string childName = entries[0].GetName();
+                    string childChildName = entries.Count > 1 ? entries[1].GetName() : null;
+
+                    if (childChildName != null && childName != childChildName)
+                    {
+                        Entry childEntry = ProcessEntry(entries, parentEntry);
+
+                        if (childEntry != null)
+                        {
+                            Entry chilChilddEntry = ProcessEntry(entries, childEntry);
+
+                            if (chilChilddEntry != null)
+                            {
+                                childEntry.Children.Add(chilChilddEntry);
+                                parentEntry.Children.Add(childEntry);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        Entry childEntry = ProcessEntry(entries, parentEntry);
+
+                        if (childEntry != null)
+                        {
+                            parentEntry.Children.Add(childEntry);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                return parentEntry;
+            }
+            else if (nodeType.Equals("END", StringComparison.OrdinalIgnoreCase) || nodeName.Equals("_PTREE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parentEntry != null)
+                {
+                    parentEntry.EndTerminator = true;
+                }
+
+                return null;
+            }
+            else
+            {
+                // It's an intermediate node
+                return currentEntry;
+            }
+        }
+
+        private byte[] EncodeStrings(Dictionary<int, string> strings)
+        {
+            using (MemoryStream memoryStream = new MemoryStream())
+            {
+                using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
+                {
+                    foreach (KeyValuePair<int, string> kvp in strings)
+                    {
+                        writer.Write(Encoding.UTF8.GetBytes(kvp.Value));
+                        writer.Write((byte)0x00);
+                    }
+
+                    return memoryStream.ToArray();
+                }
+            }
         }
 
         public byte[] EncodeKeyTable(List<string> keyList)
@@ -443,7 +399,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 writer.WriteAlignment(0x10, 0xFF);
 
-                header.KeyStringOffset = (int) writer.Position;
+                header.KeyStringOffset = (int)writer.Position;
 
                 // Write key strings
                 foreach (var key in keyList)
@@ -462,171 +418,21 @@ namespace CfgBinEditor.Level5.Binary
             }
         }
 
-        private byte[] EncodeTypes(List<CfgBinSupport.Type> types)
-        {
-            List<byte> byteArray = new List<byte>();
-
-            // Iterate through types and create type descriptors
-            for (int i = 0; i < Math.Ceiling((double)types.Count / 4); i++)
-            {
-                int typeDesc = 0;
-
-                // Create a type descriptor for each set of 4 types
-                for (int j = 4 * i; j < Math.Min(4 * (i + 1), types.Count); j++)
-                {
-                    int tagValue = 0;
-
-                    // Map CfgBinSupport.Type to tag values
-                    switch (types[j])
-                    {
-                        case CfgBinSupport.Type.String:
-                            tagValue = 0;
-                            break;
-                        case CfgBinSupport.Type.Int:
-                            tagValue = 1;
-                            break;
-                        case CfgBinSupport.Type.Float:
-                            tagValue = 2;
-                            break;
-                        default:
-                            tagValue = 0;
-                            break;
-                    }
-
-                    // Combine tag values to create the type descriptor
-                    typeDesc |= tagValue << ((j % 4) * 2);
-                }
-
-                // Convert type descriptor to byte array and add to byteArray
-                byteArray.Add((byte)typeDesc);
-            }
-
-            // Fill the byte array with FF to ensure a size multiple of 4
-            while ((byteArray.Count + 1) % 4 != 0)
-            {
-                byteArray.Add(0xFF);
-            }
-
-            return byteArray.ToArray();
-        }
-
         private long RoundUp(int n, int exp)
         {
             return ((n + exp - 1) / exp) * exp;
         }
 
-        public int Count(Dictionary<string, object> dictionary)
+        public int Count(List<Entry> entries)
         {
             int totalCount = 0;
 
-            foreach (var kvp in dictionary)
+            foreach (Entry entry in entries)
             {
-                string keyName = TransformKey(kvp.Key);
-
-                totalCount++;
-
-                if (keyName.EndsWith("BEGIN"))
-                {
-                    totalCount++;
-                }
-
-                if (kvp.Value is Dictionary<string, object> subDictionary)
-                {
-                    totalCount += Count(subDictionary);
-                }
+                totalCount += entry.Count();
             }
 
             return totalCount;
-        }
-
-        public List<string> GetUniqueKeys(Dictionary<string, object> dictionary)
-        {
-            HashSet<string> uniqueKeys = new HashSet<string>();
-            RecursiveGetKeys(dictionary, uniqueKeys);
-            return new List<string>(uniqueKeys);
-        }
-
-        public void RecursiveGetKeys(Dictionary<string, object> dictionary, HashSet<string> uniqueKeys)
-        {
-            foreach (var kvp in dictionary)
-            {
-                uniqueKeys.Add(TransformKey(kvp.Key));
-
-                if (kvp.Value is Dictionary<string, object> nestedDictionary)
-                {
-                    RecursiveGetKeys(nestedDictionary, uniqueKeys);
-                }
-
-                uniqueKeys.Add(TransformKey(kvp.Key).Replace("BEGIN", "END"));
-            }
-        }
-
-        public Dictionary<string, int> TransformAndCount(Dictionary<string, object> inputDictionary)
-        {
-            List<string> listB = ExtractKeysRecursively(inputDictionary);
-            Dictionary<string, int> resultDictionary = new Dictionary<string, int>();
-
-            foreach (string key in listB)
-            {
-                string transformedKey = TransformKey(key);
-                if (resultDictionary.ContainsKey(transformedKey))
-                {
-                    resultDictionary[transformedKey]++;
-                }
-                else
-                {
-                    resultDictionary[transformedKey] = 1;
-                }
-            }
-
-            return resultDictionary;
-        }
-
-        private List<string> ExtractKeysRecursively(Dictionary<string, object> dictionary)
-        {
-            List<string> keys = new List<string>();
-
-            foreach (var kvp in dictionary)
-            {
-                keys.Add(kvp.Key);
-                if (kvp.Value is Dictionary<string, object> subDictionary)
-                {
-                    keys.AddRange(ExtractKeysRecursively(subDictionary));
-                }
-            }
-
-            return keys;
-        }
-
-        public string TransformKey(string input)
-        {
-            return string.Join("_", input.Split('_').Reverse().Skip(1).Reverse());
-        }
-
-        public static void CountOccurrences(object value, Dictionary<string, int> counter)
-        {
-            if (value is Dictionary<string, object> nestedDictionary)
-            {
-                foreach (var nestedKeyValuePair in nestedDictionary)
-                {
-                    CountOccurrences(nestedKeyValuePair.Value, counter);
-                }
-            }
-            else if (value is List<CfgBinSupport.Variable> variableList)
-            {
-                foreach (var variable in variableList)
-                {
-                    string variableName = variable.ToString(); // You might need to adjust this based on your Variable class
-                    if (counter.ContainsKey(variableName))
-                    {
-                        counter[variableName]++;
-                    }
-                    else
-                    {
-                        counter[variableName] = 1;
-                    }
-                }
-            }
         }
 
         public void UpdateStrings(int key, string newText)
@@ -635,17 +441,22 @@ namespace CfgBinEditor.Level5.Binary
             {
                 int offset = 0;
                 Strings[key] = newText;
-                Dictionary<int, string> newStrings = new Dictionary<int, string>();
-                Dictionary<int, int> indexes = new Dictionary<int, int>();
 
-                foreach (KeyValuePair<int, string> kvp in Strings)
+                Dictionary<int, string> newStrings = new Dictionary<int, string>();
+                Dictionary<int, int> newOffset = new Dictionary<int, int>();
+
+                foreach (KeyValuePair<int, string> kvp in Strings.OrderBy(kv => kv.Key))
                 {
                     newStrings.Add(offset, kvp.Value);
-                    indexes.Add(kvp.Key, offset);
+                    newOffset.Add(kvp.Key, offset);
                     offset += Encoding.UTF8.GetByteCount(kvp.Value) + 1;
                 }
 
-                UpdateStringsEntries(Entries, indexes);
+                foreach (Entry entry in Entries)
+                {
+                    entry.UpdateString(newOffset, newStrings);
+                }
+
                 Strings = newStrings;
             }
         }
@@ -658,11 +469,11 @@ namespace CfgBinEditor.Level5.Binary
                 {
                     UpdateStringsEntries(nestedDictionary, indexes);
                 }
-                else if (kvp.Value is List<CfgBinSupport.Variable> variables)
+                else if (kvp.Value is List<Variable> variables)
                 {
-                    foreach (CfgBinSupport.Variable variable in variables)
+                    foreach (Variable variable in variables)
                     {
-                        if (variable.Type == CfgBinSupport.Type.String)
+                        if (variable.Type == Logic.Type.String)
                         {
                             int offset = (int)variable.Value;
 
@@ -676,12 +487,17 @@ namespace CfgBinEditor.Level5.Binary
             }
         }
 
-        public void InsertStrings(int key, string newText)
+        public void InsertStrings(string newText)
         {
-            if (!Strings.ContainsKey(key))
+            int offset = 0;
+
+            if (Strings.Count > 0)
             {
-                Strings[key] = newText;
+                KeyValuePair<int, string> lastItem = Strings.ElementAt(Strings.Count - 1);
+                offset = lastItem.Key + Encoding.UTF8.GetBytes(lastItem.Value).Length + 1;
             }
+
+            Strings[offset] = newText;
         }
     }
 }

@@ -21,31 +21,5 @@ namespace CfgBinEditor.Level5.Binary
             public int KeyStringOffset;
             public int keyStringLength;
         }
-
-        public enum Type
-        {
-            String,
-            Int,
-            Float,
-            Unknown
-        }
-
-        public class Variable
-        {
-            public Type Type;
-            public object Value;
-
-            public Variable(Type type, object value)
-            {
-                Type = type;
-                Value = value;
-            }
-
-            public Variable(Variable variable)
-            {
-                Type = variable.Type;
-                Value = variable.Value;
-            }
-        }
     }
 }

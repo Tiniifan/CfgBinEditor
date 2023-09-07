@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // l'ensemble d'attributs suivant. Changez les valeurs de ces attributs pour modifier les informations
 // associées à un assembly.
 [assembly: AssemblyTitle("CfgBinEditor")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("A simple tool to load and edit Level 5 Bin files")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("CfgBinEditor")]
-[assembly: AssemblyCopyright("Copyright ©  2023")]
+[assembly: AssemblyCopyright("Copyright © Tinifan 2023")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

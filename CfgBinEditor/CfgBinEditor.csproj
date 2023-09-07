@@ -52,9 +52,26 @@
     <Compile Include="CfgBinEditorWindow.Designer.cs">
       <DependentUpon>CfgBinEditorWindow.cs</DependentUpon>
     </Compile>
+    <Compile Include="IDsWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IDsWindow.Designer.cs">
+      <DependentUpon>IDsWindow.cs</DependentUpon>
+    </Compile>
+    <Compile Include="InputValueWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="InputValueWindow.Designer.cs">
+      <DependentUpon>InputValueWindow.cs</DependentUpon>
+    </Compile>
     <Compile Include="Level5\Binary\CfgBin.cs" />
     <Compile Include="Level5\Binary\CfgBinSupport.cs" />
+    <Compile Include="Level5\Binary\ID.cs" />
     <Compile Include="Level5\Binary\Tag.cs" />
+    <Compile Include="Level5\Logic\Entry.cs" />
+    <Compile Include="Level5\Logic\OffsetStringPair.cs" />
+    <Compile Include="Level5\Logic\Type.cs" />
+    <Compile Include="Level5\Logic\Variable.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SearchWindow.cs">
@@ -71,6 +88,12 @@
     </Compile>
     <EmbeddedResource Include="CfgBinEditorWindow.resx">
       <DependentUpon>CfgBinEditorWindow.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IDsWindow.resx">
+      <DependentUpon>IDsWindow.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="InputValueWindow.resx">
+      <DependentUpon>InputValueWindow.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>

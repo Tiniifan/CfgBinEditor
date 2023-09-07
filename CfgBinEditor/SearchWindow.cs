@@ -1,259 +1,148 @@
 ﻿using System;
-using System.Text.RegularExpressions;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Collections.Generic;
+using CfgBinEditor.Level5.Logic;
 using CfgBinEditor.Level5.Binary;
 
 namespace CfgBinEditor
 {
     public partial class SearchWindow : Form
-    {
-        private CfgBinEditorWindow EditorWindow;
+    { 
+        private CfgBin CfgBinFileOpened;
 
-        private Dictionary<string, object> Entries;
+        public object SearchValue { get; private set; }
 
-        private Dictionary<int, string> Strings;
+        public List<Entry> MatchesEntries { get; private set; }
 
-        public List<(string, object)> FiltredEntries;
+        readonly Dictionary<string, Dictionary<string, List<ID>>> IDs;
 
-        public SearchWindow(Dictionary<string, object> entries, Dictionary<int, string> strings, CfgBinEditorWindow editorWindow)
+        public SearchWindow(Dictionary<string, Dictionary<string, List<ID>>> ids, CfgBin cfgBinFileOpened)
         {
             InitializeComponent();
 
-            Entries = entries;
-            Strings = strings;
-            EditorWindow = editorWindow;
-        }
-
-        private bool IsHexDigit(string input)
-        {
-            return Regex.IsMatch(input, @"\A\b[0-9a-fA-F]+\b\Z");
-        }
-
-        private List<(string, object)> FlattenEntry(Dictionary<string, object> entryDictionary, Func<CfgBinSupport.Variable, bool> predicate)
-        {
-            List<(string, object)> result = new List<(string, object)>();
-
-            foreach (var kvp in entryDictionary)
-            {
-                if (kvp.Value is Dictionary<string, object> innerDict)
-                {
-                    result.AddRange(FlattenEntry(innerDict, predicate));
-                }
-                else if (kvp.Value is List<CfgBinSupport.Variable> variables)
-                {
-                    var matchingVariables = variables.Where(predicate).ToList();
-
-                    if (matchingVariables.Count > 0)
-                    {
-                        Console.WriteLine(kvp.Key + " " + result.Count);
-                        result.Add((kvp.Key, entryDictionary));
-                    }
-                }
-            }
-
-            return result;
-        }
-
-        private List<int> GetKeysByValue(Dictionary<int, string> dictionary, string value)
-        {
-            List<int> keys = new List<int>();
-
-            foreach (var kvp in dictionary)
-            {
-                if (kvp.Value.Contains(value))
-                {
-                    keys.Add(kvp.Key);
-                }
-            }
-
-            return keys;
-        }
-
-        private int ConvertLittleEndianHexToInt(string hexString)
-        {
-            int byteCount = (hexString.Length + 1) / 2; // Calcul du nombre d'octets nécessaires
-            byte[] byteArray = new byte[byteCount];
-
-            for (int i = 0; i < byteCount; i++)
-            {
-                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
-                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
-                byteArray[i] = Convert.ToByte(byteHex, 16);
-            }
-
-            return BitConverter.ToInt32(byteArray, 0);
-        }
-
-        private float ConvertLittleEndianHexToFloat(string hexString)
-        {
-            int byteCount = (hexString.Length + 1) / 2; // Calcul du nombre d'octets nécessaires
-            byte[] byteArray = new byte[byteCount];
-
-            for (int i = 0; i < byteCount; i++)
-            {
-                int startIndex = Math.Max(hexString.Length - (i + 1) * 2, 0);
-                string byteHex = hexString.Substring(startIndex, Math.Min(2, hexString.Length - startIndex));
-                byteArray[i] = Convert.ToByte(byteHex, 16);
-            }
-
-            Array.Reverse(byteArray); // Inverser l'ordre des octets pour little endian
-
-            return BitConverter.ToSingle(byteArray, 0);
+            IDs = ids;
+            CfgBinFileOpened = cfgBinFileOpened;
         }
 
         private void SearchWindow_Load(object sender, EventArgs e)
         {
-            typeComboBox.SelectedIndex = 1;
-        }
-
-        private void ValueTextBox_TextChanged(object sender, EventArgs e)
-        {
-            if (typeComboBox.SelectedIndex == -1)
-            {
-                valueTextBox.Clear();
-                return;
-            }
-
-            valueTextBox.TextChanged -= null;
-            valueTextBox.KeyPress -= null;
-
-            if (showAsHexCheckBox.Checked)
-            {
-                valueTextBox.TextChanged += (s, eventArgs) =>
-                {
-                    string hexString = valueTextBox.Text;
-                    if (hexString.Length > 8)
-                        hexString = hexString.Substring(hexString.Length - 8);
-
-                    if (!IsHexDigit(hexString))
-                    {
-                        hexString = hexString.Length > 0 ? hexString.Substring(0, hexString.Length - 1) : "";
-                    }
-
-                    valueTextBox.Text = hexString;
-                    valueTextBox.SelectionStart = valueTextBox.Text.Length;
-                };
-            }
-            else if (typeComboBox.Text == "Int" || typeComboBox.Text == "Unknown")
-            {
-                valueTextBox.KeyPress += (s, eventArgs) =>
-                {
-                    if ((!char.IsDigit(eventArgs.KeyChar) && eventArgs.KeyChar != '-' && eventArgs.KeyChar != '\b') ||
-                        (eventArgs.KeyChar == '-' && valueTextBox.Text.Length > 0) ||
-                        (valueTextBox.Text.Length >= 12)) // Max length of characters for "-4294967295"
-                        eventArgs.Handled = true;
-                };
-            }
-            else if (typeComboBox.Text == "Float")
-            {
-                string decimalSeparator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
-
-                if (!showAsHexCheckBox.Checked)
-                {
-                    valueTextBox.KeyPress += (s, eventArgs) =>
-                    {
-                        if ((!char.IsDigit(eventArgs.KeyChar) && eventArgs.KeyChar != '-' && eventArgs.KeyChar != decimalSeparator[0] && eventArgs.KeyChar != '\b') ||
-                            (eventArgs.KeyChar == '-' && valueTextBox.Text.Length > 0) ||
-                            (eventArgs.KeyChar == decimalSeparator[0] && valueTextBox.Text.Contains(decimalSeparator)) ||
-                            (valueTextBox.Text.Length >= 12)) // Max length of characters for "-4294967295"
-                            eventArgs.Handled = true;
-                    };
-                }
-            }
+            typeComboBox.SelectedIndex = 0;
         }
 
         private void SearchButton_Click(object sender, EventArgs e)
         {
-            if (typeComboBox.Text == "String")
-            {
-                Func<CfgBinSupport.Variable, bool> predicate;
+            object value;
+            bool showAsHex = showAsHexCheckBox.Checked;
+            string type = typeComboBox.SelectedItem.ToString();
 
-                try
+            if (showAsHex)
+            {
+                value = "";
+            } else
+            {
+                switch (type)
                 {
-                    if (showAsHexCheckBox.Checked)
+                    case "String":
+                        value = "";
+                        break;
+                    case "Float":
+                        value = 0f;
+                        break;
+                    default:
+                        value = 0;
+                        break;
+                }
+            }           
+
+            InputValueWindow inputValueWindow = new InputValueWindow("Search value", type, value, showAsHex, type == "Int" && IDs != null, IDs);
+            if (inputValueWindow.ShowDialog() == DialogResult.OK)
+            {
+                object retrievedValue = inputValueWindow.Value;
+                SearchValue = retrievedValue;
+
+                MatchesEntries = new List<Entry>();
+
+                if (type == "String")
+                {
+                    if (showAsHex)
                     {
-                        predicate = v => v.Type == CfgBinSupport.Type.String && (int)v.Value == ConvertLittleEndianHexToInt(valueTextBox.Text);
-                    }
+                        foreach (Entry entry in CfgBinFileOpened.Entries)
+                        {
+                            Entry[] foundEntries = entry.FindAll(x =>
+                                x.Variables != null &&
+                                x.Variables.Any(y =>
+                                    y.Type == Level5.Logic.Type.String &&
+                                    (y.Value as OffsetTextPair).Offset == Convert.ToInt32(retrievedValue)
+                                )
+                            );
+
+                            if (foundEntries != null)
+                            {
+                                MatchesEntries.AddRange(foundEntries);
+                            }
+                        }
+                    } 
                     else
                     {
-                        predicate = v => v.Type == CfgBinSupport.Type.String && GetKeysByValue(Strings, valueTextBox.Text).Contains((int)v.Value);
+                        foreach (Entry entry in CfgBinFileOpened.Entries)
+                        {
+                            Entry[] foundEntries = entry.FindAll(x =>
+                                x.Variables != null &&
+                                x.Variables.Any(y =>
+                                    y.Type == Level5.Logic.Type.String &&
+                                    (y.Value as OffsetTextPair).Text != null &&
+                                    (y.Value as OffsetTextPair).Text.StartsWith(retrievedValue.ToString(), StringComparison.OrdinalIgnoreCase)
+                                )
+                            );
+
+                            if (foundEntries != null)
+                            {
+                                MatchesEntries.AddRange(foundEntries);
+                            }
+                        }
+                    }
+                } 
+                else if (type == "Float")
+                {
+                    foreach (Entry entry in CfgBinFileOpened.Entries)
+                    {
+                        Entry[] foundEntries = entry.FindAll(x =>
+                            x.Variables != null &&
+                            x.Variables.Any(y =>
+                                y.Type == Level5.Logic.Type.Float &&
+                                Convert.ToSingle(y.Value) == Convert.ToSingle(retrievedValue)
+                            )
+                        );
+
+                        if (foundEntries != null)
+                        {
+                            MatchesEntries.AddRange(foundEntries);
+                        }
                     }
                 }
-                catch (Exception)
+                else
                 {
-                    MessageBox.Show("The inputed text cannot be converted to an String");
-                    return;
+                    foreach (Entry entry in CfgBinFileOpened.Entries)
+                    {
+                        Entry[] foundEntries = entry.FindAll(x =>
+                            x.Variables != null &&
+                            x.Variables.Any(y =>
+                                y.Type == Level5.Logic.Type.Int &&
+                                Convert.ToInt32(y.Value) == Convert.ToInt32(retrievedValue)
+                            )
+                        );
+
+                        if (foundEntries != null)
+                        {
+                            MatchesEntries.AddRange(foundEntries);
+                        }
+                    }
                 }
 
-                FiltredEntries = FlattenEntry(Entries, predicate);
+                DialogResult = DialogResult.OK;
+                Close();
             }
-            else if (typeComboBox.Text == "Int" || typeComboBox.Text == "Unknown")
-            {
-                int number;
-
-                try
-                {
-                    if (showAsHexCheckBox.Checked)
-                    {
-                        number = ConvertLittleEndianHexToInt(valueTextBox.Text);
-                    }
-                    else
-                    {
-                        number = Convert.ToInt32(valueTextBox.Text);
-                    }
-                }
-                catch (Exception)
-                {
-                    MessageBox.Show("The inputed text cannot be converted to an Int");
-                    return;
-                }
-
-                FiltredEntries = FlattenEntry(Entries, v => v.Type == CfgBinSupport.Type.Int && (int)v.Value == number);
-            }
-            else if (typeComboBox.Text == "Float")
-            {
-                float number;
-
-                try
-                {
-                    if (showAsHexCheckBox.Checked)
-                    {
-                        number = ConvertLittleEndianHexToFloat(valueTextBox.Text);
-                    }
-                    else
-                    {
-                        number = Convert.ToSingle(valueTextBox.Text);
-                    }
-                }
-                catch (Exception)
-                {
-                    MessageBox.Show("The inputed text cannot be converted to an Float");
-                    return;
-                }
-
-                FiltredEntries = FlattenEntry(Entries, v => v.Type == CfgBinSupport.Type.Float && (float)v.Value == number);
-            }
-
-            EditorWindow.tabControl1.SelectedIndex = 1;
-            EditorWindow.filtredListBox.Items.Clear();
-            EditorWindow.filtredListBox.Items.AddRange(
-                FiltredEntries.Select(x => x.Item1).ToArray()
-           );
-        }
-
-        private void resetButton_Click(object sender, EventArgs e)
-        {
-            EditorWindow.filtredListBox.Items.Clear();
-            EditorWindow.SelectedItem = null;
-            EditorWindow.SelectedEntry = null;
-            EditorWindow.variablesDataGridView.Rows.Clear();
         }
     }
 }
