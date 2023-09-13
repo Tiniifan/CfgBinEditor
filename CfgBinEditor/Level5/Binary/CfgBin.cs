@@ -131,7 +131,6 @@ namespace CfgBinEditor.Level5.Binary
         private List<Entry> ParseEntries(int entriesCount, byte[] entriesBuffer, Dictionary<uint, string> keyTable)
         {
             List<Entry> temp = new List<Entry>();
-            List<Entry> output = new List<Entry>();
 
             // Get All entries
             using (BinaryDataReader reader = new BinaryDataReader(entriesBuffer))
@@ -229,121 +228,112 @@ namespace CfgBinEditor.Level5.Binary
                 entriesKey[entryName] += 1;
             }
 
-            // Process entries
-            while (temp.Count > 0)
-            {
-                Entry rootEntry = ProcessEntry(temp);
+            return ProcessEntries(temp);
+        }
 
-                if (rootEntry != null)
+        public List<Entry> ProcessEntries(List<Entry> entries)
+        {
+            List<Entry> stack = new List<Entry>();
+            List<Entry> output = new List<Entry>();
+            Dictionary<string, int> depth = new Dictionary<string, int>();
+
+            int i = 0;  // Indice pour parcourir les entrées
+
+            while (i < entries.Count)
+            {
+                string name = entries[i].Name;
+                List<Variable> variables = entries[i].Variables;
+
+                string[] nameParts = name.Split('_');
+                string nodeType = nameParts[nameParts.Length - 2].ToLower();
+                string nodeName = string.Join("_", nameParts, 0, nameParts.Length - 1).ToLower();
+
+                if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("ptree"))
                 {
-                    output.Add(rootEntry);
+                    Entry newNode = new Entry(name, variables);
+
+                    if (stack.Count > 0)
+                    {
+                        stack[stack.Count - 1].Children.Add(newNode);
+                    }
+                    else
+                    {
+                        output.Add(newNode);
+                    }
+
+                    stack.Add(newNode);
+                    depth[name] = stack.Count;
                 }
+                else if (nodeType.EndsWith("end") || nodeType.EndsWith("_ptree"))
+                {
+                    stack[stack.Count - 1].EndTerminator = true;
+
+                    string key = "";
+                    if (depth.ContainsKey(name.Replace("_END_", "_BEG_")))
+                    {
+                        key = name.Replace("_END_", "_BEG_");
+                    }
+                    else if (depth.ContainsKey(name.Replace("_END_", "_BEGIN_")))
+                    {
+                        key = name.Replace("_END_", "_BEGIN_");
+                    }
+                    else if (depth.ContainsKey(name.Replace("_PTREE", "PTREE")))
+                    {
+                        key = name.Replace("_PTREE", "PTREE");
+                    }
+
+                    if (depth.Count > 1)
+                    {
+                        string[] keys = new string[depth.Keys.Count];
+                        depth.Keys.CopyTo(keys, 0);
+
+                        int currentDepth = depth[key];
+                        int previousDepth = depth[keys[Array.IndexOf(keys, key) - 1]];
+
+                        int popCount = currentDepth - previousDepth;
+                        for (int j = 0; j < popCount; j++)
+                        {
+                            stack.RemoveAt(stack.Count - 1);
+                        }
+
+                        depth.Remove(key);
+                    }
+                    else
+                    {
+                        stack.RemoveAt(stack.Count - 1);
+                        depth.Remove(key);
+                    }
+                }
+                else
+                {
+                    Entry newItem = new Entry(name, variables);
+
+                    if (i + 1 < entries.Count)
+                    {
+                        string[] nextNameParts = entries[i + 1].Name.Split('_');
+                        string nextNodeType = nextNameParts[nextNameParts.Length - 2].ToLower();
+                        string nextNodeName = string.Join("_", nextNameParts, 0, nextNameParts.Length - 1).ToLower();
+
+                        if (nextNodeName != nodeName && nextNodeType != "end")
+                        {
+                            stack[stack.Count - 1].Children.Add(newItem);
+                            stack.Add(newItem);
+                        }
+                        else
+                        {
+                            stack[stack.Count - 1].Children.Add(newItem);
+                        }
+                    }
+                    else
+                    {
+                        stack[stack.Count - 1].Children.Add(newItem);
+                    }
+                }
+
+                i++;
             }
 
             return output;
-        }
-
-        private Entry ProcessEntry(List<Entry> entries, Entry parentEntry = null)
-        {
-            // All entries have been processed
-            if (entries.Count == 0)
-            {
-                return null;
-            }
-
-            Entry currentEntry = entries[0];
-            entries.RemoveAt(0);
-
-            // Get the node name by splitting from the last "_"
-            string[] nameParts = currentEntry.Name.Split('_');
-            string nodeType = nameParts[nameParts.Count() - 2];
-            string nodeName = string.Join("_", nameParts.Take(nameParts.Length - 1));
-
-            if (nodeType.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) || nodeName.Equals("PTREE", StringComparison.OrdinalIgnoreCase))
-            {
-                // It's a BEGIN node
-                parentEntry = currentEntry;
-
-                while (entries.Count > 0)
-                {
-                    Entry childEntry = ProcessEntry(entries, parentEntry);
-
-                    if (childEntry != null)
-                    {
-                        parentEntry.Children.Add(childEntry);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                return parentEntry;
-            }
-            else if (nodeType.Equals("BEG", StringComparison.OrdinalIgnoreCase))
-            {
-                // It's a BEGIN node
-                parentEntry = currentEntry;
-
-                while (entries.Count > 0)
-                {
-                    string childName = entries[0].GetName();
-                    string childChildName = entries.Count > 1 ? entries[1].GetName() : null;
-
-                    if (childChildName != null && childName != childChildName)
-                    {
-                        Entry childEntry = ProcessEntry(entries, parentEntry);
-
-                        if (childEntry != null)
-                        {
-                            Entry chilChilddEntry = ProcessEntry(entries, childEntry);
-
-                            if (chilChilddEntry != null)
-                            {
-                                childEntry.Children.Add(chilChilddEntry);
-                                parentEntry.Children.Add(childEntry);
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        Entry childEntry = ProcessEntry(entries, parentEntry);
-
-                        if (childEntry != null)
-                        {
-                            parentEntry.Children.Add(childEntry);
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                return parentEntry;
-            }
-            else if (nodeType.Equals("END", StringComparison.OrdinalIgnoreCase) || nodeName.Equals("_PTREE", StringComparison.OrdinalIgnoreCase))
-            {
-                if (parentEntry != null)
-                {
-                    parentEntry.EndTerminator = true;
-                }
-
-                return null;
-            }
-            else
-            {
-                // It's an intermediate node
-                return currentEntry;
-            }
         }
 
         private byte[] EncodeStrings(Dictionary<int, string> strings)

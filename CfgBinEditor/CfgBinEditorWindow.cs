@@ -24,6 +24,14 @@ namespace CfgBinEditor
 
         private Dictionary<string, Dictionary<string, List<ID>>> IDs;
 
+        private bool Resizing;
+
+        private int Colindex = -1;
+
+        private int StartX;
+
+        private int StartWidth;
+
         public CfgBinEditorWindow()
         {
             InitializeComponent();
@@ -1023,6 +1031,81 @@ namespace CfgBinEditor
                 vsTabControl1.SelectedIndex = 0;
                 DrawVariablesDataGridView(treeView1.SelectedNode);
             }
+        }
+
+        private void TableLayoutPanel1_MouseDown(object sender, MouseEventArgs e)
+        {
+            Resizing = true;
+            StartX = e.X;
+
+            if (Colindex != -1)
+            {
+                StartWidth = tableLayoutPanel1.GetColumnWidths()[Colindex];
+            }
+        }
+
+        private void TableLayoutPanel1_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!Resizing)
+            {
+                Colindex = -1;
+                tableLayoutPanel1.Cursor = Cursors.Default;
+
+                for (int i = 0; i < tableLayoutPanel1.ColumnCount - 1; i++)
+                {
+                    int columnLeft = tableLayoutPanel1.GetColumnWidths().Take(i + 1).Sum();
+                    int columnRight = tableLayoutPanel1.GetColumnWidths().Take(i + 2).Sum();
+
+                    if (i == 0)
+                    {
+                        // Handle the left side of the first column
+                        if (e.X >= 0 && e.X <= 3)
+                        {
+                            Colindex = 0;
+                            tableLayoutPanel1.Cursor = Cursors.SizeWE;
+                            break;
+                        }
+                    }
+
+                    // Handle the right side of the first column
+                    if (i == 0 && e.X >= columnRight - 3 && e.X <= columnRight + 3)
+                    {
+                        Colindex = i + 1;
+                        tableLayoutPanel1.Cursor = Cursors.SizeWE;
+                        break;
+                    }
+
+                    // Handle the left side of a column
+                    if (e.X >= columnLeft - 3 && e.X <= columnLeft + 3)
+                    {
+                        Colindex = i;
+                        tableLayoutPanel1.Cursor = Cursors.SizeWE;
+                        break;
+                    }
+
+                    // Handle the right side of a column
+                    if (e.X >= columnRight - 3 && e.X <= columnRight + 3)
+                    {
+                        Colindex = i + 1;
+                        tableLayoutPanel1.Cursor = Cursors.SizeWE;
+                        break;
+                    }
+                }
+            }
+            if (Resizing && Colindex > -1)
+            {
+                int newWidth = StartWidth + (e.X - StartX);
+                if (newWidth < 0) return;
+
+                tableLayoutPanel1.ColumnStyles[Colindex].Width = newWidth;
+            }
+        }
+
+
+        private void TableLayoutPanel1_MouseUp(object sender, MouseEventArgs e)
+        {
+            Resizing = false;
+            tableLayoutPanel1.Cursor = null;
         }
     }
 }

@@ -69,6 +69,7 @@
             this.contextMenuStrip3 = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.importToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openFileDialog4 = new System.Windows.Forms.OpenFileDialog();
+            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.vsTabControl1 = new CfgBinEditor.UI.VSTabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.variablesDataGridView = new System.Windows.Forms.DataGridView();
@@ -84,6 +85,7 @@
             this.contextMenuStrip1.SuspendLayout();
             this.contextMenuStrip2.SuspendLayout();
             this.contextMenuStrip3.SuspendLayout();
+            this.tableLayoutPanel1.SuspendLayout();
             this.vsTabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.variablesDataGridView)).BeginInit();
@@ -118,7 +120,7 @@
             // 
             this.openToolStripMenuItem.Name = "openToolStripMenuItem";
             this.openToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.O)));
-            this.openToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.openToolStripMenuItem.Size = new System.Drawing.Size(146, 22);
             this.openToolStripMenuItem.Text = "Open";
             this.openToolStripMenuItem.Click += new System.EventHandler(this.OpenToolStripMenuItem_Click);
             // 
@@ -126,7 +128,7 @@
             // 
             this.newStripMenuItem.Name = "newStripMenuItem";
             this.newStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.newStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.newStripMenuItem.Size = new System.Drawing.Size(146, 22);
             this.newStripMenuItem.Text = "New";
             this.newStripMenuItem.Click += new System.EventHandler(this.NewStripMenuItem_Click);
             // 
@@ -135,7 +137,7 @@
             this.saveToolStripMenuItem.Enabled = false;
             this.saveToolStripMenuItem.Name = "saveToolStripMenuItem";
             this.saveToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.S)));
-            this.saveToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.saveToolStripMenuItem.Size = new System.Drawing.Size(146, 22);
             this.saveToolStripMenuItem.Text = "Save";
             this.saveToolStripMenuItem.Click += new System.EventHandler(this.SaveToolStripMenuItem_Click);
             // 
@@ -194,16 +196,17 @@
             // 
             // treeView1
             // 
-            this.treeView1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left)));
+            this.treeView1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.treeView1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
             this.treeView1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.treeView1.ForeColor = System.Drawing.Color.White;
             this.treeView1.HideSelection = false;
             this.treeView1.LineColor = System.Drawing.Color.White;
-            this.treeView1.Location = new System.Drawing.Point(12, 27);
+            this.treeView1.Location = new System.Drawing.Point(4, 4);
             this.treeView1.Name = "treeView1";
-            this.treeView1.Size = new System.Drawing.Size(330, 396);
+            this.treeView1.Size = new System.Drawing.Size(292, 386);
             this.treeView1.TabIndex = 1;
             this.treeView1.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.TreeView1_AfterSelect);
             this.treeView1.NodeMouseClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(this.TreeView1_NodeMouseClick);
@@ -341,6 +344,27 @@
             // 
             this.openFileDialog4.FileName = "openFileDialog4";
             // 
+            // tableLayoutPanel1
+            // 
+            this.tableLayoutPanel1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.tableLayoutPanel1.CellBorderStyle = System.Windows.Forms.TableLayoutPanelCellBorderStyle.Single;
+            this.tableLayoutPanel1.ColumnCount = 2;
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 33.33333F));
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 66.66666F));
+            this.tableLayoutPanel1.Controls.Add(this.treeView1, 0, 0);
+            this.tableLayoutPanel1.Controls.Add(this.vsTabControl1, 1, 0);
+            this.tableLayoutPanel1.Location = new System.Drawing.Point(12, 27);
+            this.tableLayoutPanel1.Name = "tableLayoutPanel1";
+            this.tableLayoutPanel1.RowCount = 1;
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(898, 394);
+            this.tableLayoutPanel1.TabIndex = 8;
+            this.tableLayoutPanel1.MouseDown += new System.Windows.Forms.MouseEventHandler(this.TableLayoutPanel1_MouseDown);
+            this.tableLayoutPanel1.MouseMove += new System.Windows.Forms.MouseEventHandler(this.TableLayoutPanel1_MouseMove);
+            this.tableLayoutPanel1.MouseUp += new System.Windows.Forms.MouseEventHandler(this.TableLayoutPanel1_MouseUp);
+            // 
             // vsTabControl1
             // 
             this.vsTabControl1.ActiveIndicator = System.Drawing.Color.White;
@@ -359,12 +383,12 @@
             this.vsTabControl1.InActiveIndicator = System.Drawing.Color.White;
             this.vsTabControl1.InActiveTab = System.Drawing.Color.FromArgb(((int)(((byte)(54)))), ((int)(((byte)(54)))), ((int)(((byte)(54)))));
             this.vsTabControl1.InActiveText = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
-            this.vsTabControl1.Location = new System.Drawing.Point(352, 27);
+            this.vsTabControl1.Location = new System.Drawing.Point(300, 1);
             this.vsTabControl1.Margin = new System.Windows.Forms.Padding(0);
             this.vsTabControl1.Name = "vsTabControl1";
             this.vsTabControl1.Padding = new System.Drawing.Point(0, 0);
             this.vsTabControl1.SelectedIndex = 0;
-            this.vsTabControl1.Size = new System.Drawing.Size(559, 396);
+            this.vsTabControl1.Size = new System.Drawing.Size(597, 392);
             this.vsTabControl1.TabIndex = 7;
             this.vsTabControl1.SelectedIndexChanged += new System.EventHandler(this.VsTabControl1_SelectedIndexChanged);
             // 
@@ -375,7 +399,7 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 25);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(551, 367);
+            this.tabPage1.Size = new System.Drawing.Size(589, 363);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Variables";
             // 
@@ -426,7 +450,7 @@
             dataGridViewCellStyle5.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
             this.variablesDataGridView.RowsDefaultCellStyle = dataGridViewCellStyle5;
             this.variablesDataGridView.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.variablesDataGridView.Size = new System.Drawing.Size(548, 358);
+            this.variablesDataGridView.Size = new System.Drawing.Size(586, 354);
             this.variablesDataGridView.TabIndex = 6;
             this.variablesDataGridView.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.VariablesDataGridView_CellClick);
             this.variablesDataGridView.CellValueChanged += new System.Windows.Forms.DataGridViewCellEventHandler(this.VariableDataGridView_CellValueChanged);
@@ -470,7 +494,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 25);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(551, 367);
+            this.tabPage2.Size = new System.Drawing.Size(589, 363);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Strings";
             // 
@@ -518,7 +542,7 @@
             dataGridViewCellStyle9.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
             this.stringsDataGridView.RowsDefaultCellStyle = dataGridViewCellStyle9;
             this.stringsDataGridView.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.stringsDataGridView.Size = new System.Drawing.Size(548, 358);
+            this.stringsDataGridView.Size = new System.Drawing.Size(926, 369);
             this.stringsDataGridView.TabIndex = 7;
             this.stringsDataGridView.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.StringsDataGridView_CellClick);
             // 
@@ -543,8 +567,7 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(54)))), ((int)(((byte)(54)))), ((int)(((byte)(54)))));
             this.ClientSize = new System.Drawing.Size(922, 433);
-            this.Controls.Add(this.treeView1);
-            this.Controls.Add(this.vsTabControl1);
+            this.Controls.Add(this.tableLayoutPanel1);
             this.Controls.Add(this.menuStrip1);
             this.MainMenuStrip = this.menuStrip1;
             this.Name = "CfgBinEditorWindow";
@@ -556,6 +579,7 @@
             this.contextMenuStrip1.ResumeLayout(false);
             this.contextMenuStrip2.ResumeLayout(false);
             this.contextMenuStrip3.ResumeLayout(false);
+            this.tableLayoutPanel1.ResumeLayout(false);
             this.vsTabControl1.ResumeLayout(false);
             this.tabPage1.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.variablesDataGridView)).EndInit();
@@ -610,6 +634,7 @@
         private System.Windows.Forms.ToolStripMenuItem collapseAllToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem searchToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem resetToolStripMenuItem;
+        private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
     }
 }
 

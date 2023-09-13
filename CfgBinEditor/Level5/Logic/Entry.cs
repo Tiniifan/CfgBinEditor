@@ -346,58 +346,34 @@ namespace CfgBinEditor.Level5.Logic
 
                     if (Children.Count > 0)
                     {
-                        Dictionary<string, int> distinctEntry = GetChildrenCountRecursive()
-                            .GroupBy(kv => kv.Key)
-                            .ToDictionary(group => group.Key, group => group.Sum(kv => kv.Value));
+                        writer.Write((byte)Variables.Count);
 
-                        if (distinctEntry.Count < Variables.Count)
+                        types = Variables.Select(x => x.Type).ToList();
+                        writer.Write(EncodeTypes(types));
+
+                        foreach (Variable variable in Variables)
                         {
-                            writer.Write((byte)Variables.Count);
-
-                            types = Variables.Select(x => x.Type).ToList();
-                            writer.Write(EncodeTypes(types));
-
-                            foreach (Variable variable in Variables)
+                            switch (variable.Type)
                             {
-                                switch (variable.Type)
-                                {
-                                    case Type.String:
-                                        OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-                                        writer.Write(offsetTextPair.Offset);
-                                        break;
-                                    case Type.Int:
-                                        writer.Write(Convert.ToInt32(variable.Value));
-                                        break;
-                                    case Type.Float:
-                                        writer.Write(Convert.ToSingle(variable.Value));
-                                        break;
-                                    default:
-                                        writer.Write(Convert.ToInt32(variable.Value));
-                                        break;
-                                }
+                                case Type.String:
+                                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
+                                    writer.Write(offsetTextPair.Offset);
+                                    break;
+                                case Type.Int:
+                                    writer.Write(Convert.ToInt32(variable.Value));
+                                    break;
+                                case Type.Float:
+                                    writer.Write(Convert.ToSingle(variable.Value));
+                                    break;
+                                default:
+                                    writer.Write(Convert.ToInt32(variable.Value));
+                                    break;
                             }
+                        }
 
-                            foreach (Entry child in Children)
-                            {
-                                writer.Write(child.EncodeEntry());
-                            }
-                        } 
-                        else
+                        foreach (Entry child in Children)
                         {
-                            writer.Write((byte)distinctEntry.Count);
-
-                            types = Enumerable.Repeat(Type.Int, distinctEntry.Count).ToList();
-                            writer.Write(EncodeTypes(types));
-
-                            foreach (int count in distinctEntry.Values)
-                            {
-                                writer.Write(count);
-                            }
-
-                            foreach (Entry child in Children)
-                            {
-                                writer.Write(child.EncodeEntry());
-                            }
+                            writer.Write(child.EncodeEntry());
                         }
                     }
                     else
