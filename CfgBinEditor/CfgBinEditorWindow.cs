@@ -362,6 +362,7 @@ namespace CfgBinEditor
         private void NewStripMenuItem_Click(object sender, EventArgs e)
         {
             InputValueWindow inputValueWindow = new InputValueWindow("New File", "String", "", false);
+
             if (inputValueWindow.ShowDialog() == DialogResult.OK)
             {
                 CfgBinFileOpened = new CfgBin();

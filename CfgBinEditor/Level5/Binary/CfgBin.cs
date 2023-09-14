@@ -326,7 +326,13 @@ namespace CfgBinEditor.Level5.Binary
                     }
                     else
                     {
-                        stack[stack.Count - 1].Children.Add(newItem);
+                        if (stack.Count() != 0)
+                        {
+                            stack[stack.Count - 1].Children.Add(newItem);
+                        } else
+                        {
+                            output.Add(newItem);
+                        }
                     }
                 }
 
