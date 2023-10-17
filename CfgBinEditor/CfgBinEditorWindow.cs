@@ -347,7 +347,8 @@ namespace CfgBinEditor
             {
                 variablesDataGridView.Rows.Clear();
 
-                CfgBinFileOpened = new CfgBin(new FileStream(openFileDialog1.FileName, FileMode.Open, FileAccess.Read));
+                CfgBinFileOpened = new CfgBin();
+                CfgBinFileOpened.Open(new FileStream(openFileDialog1.FileName, FileMode.Open, FileAccess.Read));
                 SetSelectecTag();
                 DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
                 FillStrings();
@@ -461,7 +462,8 @@ namespace CfgBinEditor
 
                 if (openFileDialog3.ShowDialog() == DialogResult.OK)
                 {
-                    CfgBin newCfgBin = new CfgBin(new FileStream(openFileDialog3.FileName, FileMode.Open, FileAccess.Read));
+                    CfgBin newCfgBin = new CfgBin();
+                    CfgBinFileOpened.Open(new FileStream(openFileDialog3.FileName, FileMode.Open, FileAccess.Read));
 
                     if (newCfgBin != null)
                     {
@@ -581,7 +583,8 @@ namespace CfgBinEditor
 
                 if (openFileDialog4.ShowDialog() == DialogResult.OK)
                 {
-                    CfgBin newCfgBin = new CfgBin(new FileStream(openFileDialog4.FileName, FileMode.Open, FileAccess.Read));
+                    CfgBin newCfgBin = new CfgBin();
+                    CfgBinFileOpened.Open(new FileStream(openFileDialog4.FileName, FileMode.Open, FileAccess.Read));
 
                     if (newCfgBin != null)
                     {

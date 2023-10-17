@@ -15,14 +15,17 @@ namespace CfgBinEditor.Level5.Logic
 
         public bool EndTerminator;
 
+        public Encoding Encoding;
+
         public List<Variable> Variables;
 
         public List<Entry> Children;
 
-        public Entry(string name, List<Variable> variables)
+        public Entry(string name, List<Variable> variables, Encoding encoding)
         {
             Name = name;
             Variables = variables;
+            Encoding = encoding;
             Children = new List<Entry>();
         }
 
@@ -130,7 +133,7 @@ namespace CfgBinEditor.Level5.Logic
             List<Entry> clonedChildren = Children.Select(child => child.Clone()).ToList();
 
             // Create a new cloned entry
-            Entry clonedEntry = new Entry(Name, clonedVariables)
+            Entry clonedEntry = new Entry(Name, clonedVariables, Encoding)
             {
                 EndTerminator = EndTerminator,
                 Children = clonedChildren
@@ -222,7 +225,7 @@ namespace CfgBinEditor.Level5.Logic
                 {
                     foreach (KeyValuePair<int, string> kvp in strings)
                     {
-                        writer.Write(Encoding.UTF8.GetBytes(kvp.Value));
+                        writer.Write(Encoding.GetBytes(kvp.Value));
                         writer.Write((byte)0x00);
                     }
 
@@ -242,7 +245,7 @@ namespace CfgBinEditor.Level5.Logic
 
                 foreach (var key in keyList)
                 {
-                    keyStringsSize += (uint)Encoding.UTF8.GetByteCount(key) + 1; // +1 for null-terminator
+                    keyStringsSize += (uint)Encoding.GetByteCount(key) + 1; // +1 for null-terminator
                 }
 
                 // Write header
@@ -259,10 +262,10 @@ namespace CfgBinEditor.Level5.Logic
                 // Calculate CRC32 for each key and write key entries
                 foreach (var key in keyList)
                 {
-                    uint crc32 = Crc32.Compute(Encoding.UTF8.GetBytes(key));
+                    uint crc32 = Crc32.Compute(Encoding.GetBytes(key));
                     writer.Write(crc32);
                     writer.Write(stringOffset);
-                    stringOffset += Encoding.UTF8.GetByteCount(key) + 1;
+                    stringOffset += Encoding.GetByteCount(key) + 1;
                 }
 
                 writer.WriteAlignment(0x10, 0xFF);
@@ -272,7 +275,7 @@ namespace CfgBinEditor.Level5.Logic
                 // Write key strings
                 foreach (var key in keyList)
                 {
-                    byte[] stringBytes = Encoding.UTF8.GetBytes(key);
+                    byte[] stringBytes = Encoding.GetBytes(key);
                     writer.Write(stringBytes);
                     writer.Write((byte)0); // Null-terminator
                 }
@@ -341,7 +344,7 @@ namespace CfgBinEditor.Level5.Logic
                 using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
                 {
                     string entryName = GetName();
-                    writer.Write(Crc32.Compute(Encoding.UTF8.GetBytes(entryName)));
+                    writer.Write(Crc32.Compute(Encoding.GetBytes(entryName)));
                     List<Type> types;
 
                     if (Children.Count > 0)
@@ -418,7 +421,7 @@ namespace CfgBinEditor.Level5.Logic
                             endTerminatorName = GetName().Replace("BEGIN", "END").Replace("BEG", "END");
                         }
 
-                        writer.Write(Crc32.Compute(Encoding.UTF8.GetBytes(endTerminatorName)));
+                        writer.Write(Crc32.Compute(Encoding.GetBytes(endTerminatorName)));
                         writer.Write(new byte[4] { 0x00, 0xFF, 0xFF, 0xFF });
                     }
 
@@ -460,13 +463,25 @@ namespace CfgBinEditor.Level5.Logic
                 writer.Write(EncodeKeyTable(distinctEntry));
 
                 writer.Write(new byte[5] { 0x01, 0x74, 0x32, 0x62, 0xFE });
-                writer.Write(new byte[4] { 0x01, 0x01, 0x00, 0x01 });
+                writer.Write(new byte[4] { 0x01, GetEncoding(), 0x00, 0x01 });
                 writer.WriteAlignment();
 
                 writer.Seek(0);
                 writer.WriteStruct(header);
 
                 return stream.ToArray();
+            }
+        }
+
+        public byte GetEncoding()
+        {
+            if (Encoding != null && Encoding.Equals(Encoding.GetEncoding("SHIFT-JIS")))
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
             }
         }
 
@@ -480,7 +495,7 @@ namespace CfgBinEditor.Level5.Logic
             foreach (var kvp in strings.OrderBy(kv => kv.Key))
             {
                 newOffsets[kvp.Key] = currentOffset;
-                currentOffset += Encoding.UTF8.GetByteCount(kvp.Value) + 1;             
+                currentOffset += Encoding.GetByteCount(kvp.Value) + 1;             
             }
 
             UpdateOffsetsRecursive(newOffsets);

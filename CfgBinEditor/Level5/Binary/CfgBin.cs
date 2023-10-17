@@ -11,6 +11,8 @@ namespace CfgBinEditor.Level5.Binary
 {
     public class CfgBin
     {
+        public Encoding Encoding;
+
         public List<Entry> Entries;
 
         public Dictionary<int, string> Strings;
@@ -21,10 +23,14 @@ namespace CfgBinEditor.Level5.Binary
             Strings = new Dictionary<int, string>();
         }
 
-        public CfgBin(Stream stream)
+        public void Open(Stream stream)
         {
             using (var reader = new BinaryDataReader(stream))
             {
+                reader.Seek((uint)reader.Length - 0x0A);
+                Encoding = SetEncoding(reader.ReadValue<byte>());
+
+                reader.Seek(0x0);
                 var header = reader.ReadStruct<CfgBinSupport.Header>();
 
                 byte[] entriesBuffer = reader.GetSection(0x10, header.StringTableOffset);
@@ -79,11 +85,49 @@ namespace CfgBinEditor.Level5.Binary
                 writer.Write(EncodeKeyTable(uniqueKeysList));
 
                 writer.Write(new byte[5] { 0x01, 0x74, 0x32, 0x62, 0xFE });
-                writer.Write(new byte[4] { 0x01, 0x01, 0x00, 0x01 });
+                writer.Write(new byte[4] { 0x01, GetEncoding(), 0x00, 0x01 });
                 writer.WriteAlignment();
 
                 writer.Seek(0);
                 writer.WriteStruct(header);
+            }
+        }
+
+        public void ReplaceEntry(string entryName, Entry newEntry)
+        {
+            int entryIndex = Entries.FindIndex(x => x.GetName() == entryName);
+
+            if (entryIndex >= 0)
+            {
+                Entries[entryIndex] = newEntry;
+            }
+            else
+            {
+                Entries.Add(newEntry);
+            }
+        }
+
+        public byte GetEncoding()
+        {
+            if (Encoding != null && Encoding.Equals(Encoding.GetEncoding("shift-jis")))
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
+            }
+        }
+
+        private Encoding SetEncoding(byte b)
+        {
+            if (b == 0)
+            {
+                return Encoding.GetEncoding("SHIFT-JIS");
+            }
+            else
+            {
+                return Encoding.UTF8;
             }
         }
 
@@ -95,7 +139,7 @@ namespace CfgBinEditor.Level5.Binary
             {
                 for (int i = 0; i < stringCount; i++)
                 {
-                    result.Add((int)reader.Position, reader.ReadString(Encoding.UTF8));
+                    result.Add((int)reader.Position, reader.ReadString(Encoding));
                 }
             }
 
@@ -120,7 +164,7 @@ namespace CfgBinEditor.Level5.Binary
                     int stringEnd = Array.IndexOf(keyStringBlob, (byte)0, stringStart);
                     byte[] stringBuf = new byte[stringEnd - stringStart];
                     Array.Copy(keyStringBlob, stringStart, stringBuf, 0, stringEnd - stringStart);
-                    string key = Encoding.UTF8.GetString(stringBuf);
+                    string key = Encoding.GetString(stringBuf);
                     keyTable[crc32] = key;
                 }
             }
@@ -209,7 +253,7 @@ namespace CfgBinEditor.Level5.Binary
                         }
                     }
 
-                    temp.Add(new Entry(name, variables));
+                    temp.Add(new Entry(name, variables, Encoding));
                 }
             }
 
@@ -250,7 +294,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("ptree"))
                 {
-                    Entry newNode = new Entry(name, variables);
+                    Entry newNode = new Entry(name, variables, Encoding);
 
                     if (stack.Count > 0)
                     {
@@ -306,7 +350,7 @@ namespace CfgBinEditor.Level5.Binary
                 }
                 else
                 {
-                    Entry newItem = new Entry(name, variables);
+                    Entry newItem = new Entry(name, variables, Encoding);
 
                     if (i + 1 < entries.Count)
                     {
@@ -329,7 +373,8 @@ namespace CfgBinEditor.Level5.Binary
                         if (stack.Count() != 0)
                         {
                             stack[stack.Count - 1].Children.Add(newItem);
-                        } else
+                        }
+                        else
                         {
                             output.Add(newItem);
                         }
@@ -350,7 +395,7 @@ namespace CfgBinEditor.Level5.Binary
                 {
                     foreach (KeyValuePair<int, string> kvp in strings)
                     {
-                        writer.Write(Encoding.UTF8.GetBytes(kvp.Value));
+                        writer.Write(Encoding.GetBytes(kvp.Value));
                         writer.Write((byte)0x00);
                     }
 
@@ -370,7 +415,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 foreach (var key in keyList)
                 {
-                    keyStringsSize += (uint)Encoding.UTF8.GetByteCount(key) + 1; // +1 for null-terminator
+                    keyStringsSize += (uint)Encoding.GetByteCount(key) + 1; // +1 for null-terminator
                 }
 
                 // Write header
@@ -387,10 +432,10 @@ namespace CfgBinEditor.Level5.Binary
                 // Calculate CRC32 for each key and write key entries
                 foreach (var key in keyList)
                 {
-                    uint crc32 = Crc32.Compute(Encoding.UTF8.GetBytes(key));
+                    uint crc32 = Crc32.Compute(Encoding.GetBytes(key));
                     writer.Write(crc32);
                     writer.Write(stringOffset);
-                    stringOffset += Encoding.UTF8.GetBytes(key).Count() + 1;
+                    stringOffset += Encoding.GetBytes(key).Count() + 1;
                 }
 
                 writer.WriteAlignment(0x10, 0xFF);
@@ -400,7 +445,7 @@ namespace CfgBinEditor.Level5.Binary
                 // Write key strings
                 foreach (var key in keyList)
                 {
-                    byte[] stringBytes = Encoding.UTF8.GetBytes(key);
+                    byte[] stringBytes = Encoding.GetBytes(key);
                     writer.Write(stringBytes);
                     writer.Write((byte)0); // Null-terminator
                 }
@@ -445,7 +490,7 @@ namespace CfgBinEditor.Level5.Binary
                 {
                     newStrings.Add(offset, kvp.Value);
                     newOffset.Add(kvp.Key, offset);
-                    offset += Encoding.UTF8.GetByteCount(kvp.Value) + 1;
+                    offset += Encoding.GetByteCount(kvp.Value) + 1;
                 }
 
                 foreach (Entry entry in Entries)
@@ -490,7 +535,7 @@ namespace CfgBinEditor.Level5.Binary
             if (Strings.Count > 0)
             {
                 KeyValuePair<int, string> lastItem = Strings.ElementAt(Strings.Count - 1);
-                offset = lastItem.Key + Encoding.UTF8.GetBytes(lastItem.Value).Length + 1;
+                offset = lastItem.Key + Encoding.GetBytes(lastItem.Value).Length + 1;
             }
 
             Strings[offset] = newText;
