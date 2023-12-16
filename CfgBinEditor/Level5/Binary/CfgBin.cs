@@ -4,8 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+//using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using CfgBinEditor.Tools;
-using CfgBinEditor.Level5.Logic;
+using CfgBinEditor.Level5.Binary.Logic;
 
 namespace CfgBinEditor.Level5.Binary
 {
@@ -21,6 +23,31 @@ namespace CfgBinEditor.Level5.Binary
         {
             Entries = new List<Entry>();
             Strings = new Dictionary<int, string>();
+        }
+
+        public void Open(byte[] data)
+        {
+            using (var reader = new BinaryDataReader(data))
+            {
+                reader.Seek((uint)reader.Length - 0x0A);
+                Encoding = SetEncoding(reader.ReadValue<byte>());
+
+                reader.Seek(0x0);
+                var header = reader.ReadStruct<CfgBinSupport.Header>();
+
+                byte[] entriesBuffer = reader.GetSection(0x10, header.StringTableOffset);
+
+                byte[] stringTableBuffer = reader.GetSection((uint)header.StringTableOffset, header.StringTableLength);
+                Strings = ParseStrings(header.StringTableCount, stringTableBuffer);
+
+                long keyTableOffset = RoundUp(header.StringTableOffset + header.StringTableLength, 16);
+                reader.Seek((uint)keyTableOffset);
+                int keyTableSize = reader.ReadValue<int>();
+                byte[] keyTableBlob = reader.GetSection((uint)keyTableOffset, keyTableSize);
+                Dictionary<uint, string> keyTable = ParseKeyTable(keyTableBlob);
+
+                Entries = ParseEntries(header.EntriesCount, entriesBuffer, keyTable);
+            }
         }
 
         public void Open(Stream stream)
@@ -93,6 +120,273 @@ namespace CfgBinEditor.Level5.Binary
             }
         }
 
+        public byte[] Save()
+        {
+            using (MemoryStream stream = new MemoryStream())
+            {
+                BinaryDataWriter writer = new BinaryDataWriter(stream);
+
+                CfgBinSupport.Header header;
+                header.EntriesCount = Count(Entries);
+                header.StringTableOffset = 0;
+                header.StringTableLength = 0;
+                header.StringTableCount = Strings.Count;
+
+                writer.Seek(0x10);
+
+                foreach (Entry entry in Entries)
+                {
+                    writer.Write(entry.EncodeEntry());
+                }
+
+                writer.WriteAlignment(0x10, 0xFF);
+                header.StringTableOffset = (int)writer.Position;
+
+                if (Strings.Count > 0)
+                {
+                    writer.Write(EncodeStrings(Strings));
+                    header.StringTableLength = (int)writer.Position - header.StringTableOffset;
+                    writer.WriteAlignment(0x10, 0xFF);
+                }
+
+                List<string> uniqueKeysList = Entries
+                    .SelectMany(entry => entry.GetUniqueKeys())
+                    .Distinct()
+                    .ToList();
+
+                writer.Write(EncodeKeyTable(uniqueKeysList));
+
+                writer.Write(new byte[5] { 0x01, 0x74, 0x32, 0x62, 0xFE });
+                writer.Write(new byte[4] { 0x01, GetEncoding(), 0x00, 0x01 });
+                writer.WriteAlignment();
+
+                writer.Seek(0);
+                writer.WriteStruct(header);
+
+                return stream.ToArray();
+            }
+        }
+
+        public void ImportJson(string fileName)
+        {
+            // Read the JSON content from the file
+            string jsonContent = File.ReadAllText(fileName);
+
+            // Parse the JSON content
+            JObject json = JObject.Parse(jsonContent);
+
+            // Retrieve the encoding
+            string encodingName = json.Value<string>("Encoding");
+            Encoding = Encoding.GetEncoding(encodingName);
+
+            // Retrieve the entries
+            JArray entriesArray = json.Value<JArray>("Entries");
+            Entries = new List<Entry>();
+
+            if (entriesArray != null)
+            {
+                foreach (JObject entryObject in entriesArray.Children<JObject>())
+                {
+                    Entry entry = ParseEntry(entryObject, Encoding);
+                    Entries.Add(entry);
+                }
+            }
+        }
+
+        private Entry ParseEntry(JObject entryObject, Encoding encoding)
+        {
+            Entry entry = new Entry();
+
+            entry.Name = entryObject.Value<string>("Name");
+            entry.EndTerminator = entryObject.Value<bool>("EndTerminator");
+            entry.Variables = new List<Variable>();
+            entry.Children = new List<Entry>();
+
+            JArray variablesArray = entryObject.Value<JArray>("Variables");
+            if (variablesArray != null)
+            {
+                foreach (JObject variableObject in variablesArray.Children<JObject>())
+                {
+                    Variable variable = ParseVariable(variableObject, encoding);
+                    entry.Variables.Add(variable);
+                }
+            }
+
+            JArray childrenArray = entryObject.Value<JArray>("Children");
+            if (childrenArray != null)
+            {
+                foreach (JObject childObject in childrenArray.Children<JObject>())
+                {
+                    Entry childEntry = ParseEntry(childObject, encoding);
+                    entry.Children.Add(childEntry);
+                }
+            }
+
+            return entry;
+        }
+
+        private Variable ParseVariable(JObject variableObject, Encoding encoding)
+        {
+            Variable variable = new Variable();
+
+            JToken valueToken = variableObject["Value"];
+            (Logic.Type, object) typeAndValue = ParseValue(valueToken, encoding);
+
+            variable.Type = typeAndValue.Item1;
+            variable.Value = typeAndValue.Item2;
+
+            return variable;
+        }
+
+        private (Logic.Type, object) ParseValue(JToken valueToken, System.Text.Encoding encoding)
+        {
+            if (valueToken.Type == JTokenType.String)
+            {
+                string textValue = valueToken.Value<string>();
+
+                int offset = 0;
+                if (Strings.Count != 0)
+                {
+                    if (!Strings.ContainsValue(textValue))
+                    {
+                        offset = Strings.Keys.Max() + encoding.GetBytes(textValue).Length + 1;
+                        Strings.Add(offset, textValue);
+                    }
+                    else
+                    {
+                        offset = Strings.FirstOrDefault(x => x.Value == textValue).Key;
+                    }
+                } else
+                {
+                    Strings.Add(offset, textValue);
+                }
+
+                return (Logic.Type.String, new OffsetTextPair(offset, textValue));
+            }
+            else if (valueToken.Type == JTokenType.Integer)
+            {
+                return (Logic.Type.Int, valueToken.Value<int>());
+            }
+            else if (valueToken.Type == JTokenType.Float)
+            {
+                return (Logic.Type.Float, valueToken.Value<float>());
+            }
+            else
+            {
+                return (Logic.Type.Int, 0);
+            }
+        }
+
+        public void ToJson(string fileName, List<Tag> tags)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("{");
+            sb.AppendLine($"  \"Encoding\": \"{this.Encoding.WebName}\",");
+
+            if (Entries.Count > 0)
+            {
+                sb.AppendLine("  \"Entries\": [");
+
+                for (int i = 0; i < this.Entries.Count; i++)
+                {
+                    Entry entry = Entries[i];
+
+                    AppendEntryToJson(sb, entry, tags, 1, i == this.Entries.Count-1);
+                }
+
+                sb.AppendLine("  ]");
+            }
+
+            sb.AppendLine("}");
+
+            File.WriteAllText(fileName, sb.ToString());
+        }
+
+        private void AppendEntryToJson(StringBuilder sb, Entry entry, List<Tag> tags, int indentationLevel, bool lastElement)
+        {
+            Tag tag = tags.Find(x => x.Name == entry.GetName());
+
+            // Fonction pour générer une chaîne d'indentation en fonction du niveau d'indentation
+            string indentation = new string(' ', 2 * indentationLevel);
+
+            sb.AppendLine($"{indentation}{{");
+            sb.AppendLine($"{indentation}  \"Name\": \"{entry.Name}\",");
+            sb.AppendLine($"{indentation}  \"EndTerminator\": {entry.EndTerminator.ToString().ToLower()},");
+            sb.AppendLine($"{indentation}  \"Variables\": [");
+
+            for (int i = 0; i < entry.Variables.Count(); i++)
+            {
+                Variable variable = entry.Variables[i];
+                string variableName = "Variable " + i;
+
+                if (tag != null)
+                {
+                    variableName = tag.Properties[i].Item1;
+                }
+
+                sb.AppendLine($"{indentation}    {{");
+                sb.AppendLine($"{indentation}      \"Name\": \"{variableName}\",");
+                sb.AppendLine($"{indentation}      \"Value\": {GetValueString(variable.Value)}");
+
+                if (i < entry.Variables.Count - 1)
+                {
+                    sb.AppendLine($"{indentation}    }},");
+                } else
+                {
+                    sb.AppendLine($"{indentation}    }}");
+                }
+            }
+
+            if (entry.Children.Count > 0)
+            {
+                sb.AppendLine($"{indentation}  ],");
+
+                sb.AppendLine($"{indentation}  \"Children\": [");
+
+                for (int i = 0; i < entry.Children.Count; i++)
+                {
+                    Entry subEntry = entry.Children[i];
+
+                    AppendEntryToJson(sb, subEntry, tags, 1, i == entry.Children.Count - 1);
+                }
+
+                sb.AppendLine($"{indentation}  ]");
+            } 
+            else
+            {
+                sb.AppendLine($"{indentation}  ]");
+            }
+
+            if (lastElement)
+            {
+                sb.AppendLine($"{indentation}}}");
+            } else
+            {
+                sb.AppendLine($"{indentation}}},");
+            }        
+        }
+
+        private string GetValueString(object value)
+        {
+            if (value is OffsetTextPair)
+            {
+                return $"\"{(value as OffsetTextPair).Text}\"";
+            }
+            else if (value is int)
+            {
+                return value.ToString();
+            }
+            else if (value is float)
+            {
+                // Utiliser la culture anglaise pour formater la chaîne
+                return ((float)value).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                return "null";
+            }
+        }
+
         public void ReplaceEntry(string entryName, Entry newEntry)
         {
             int entryIndex = Entries.FindIndex(x => x.GetName() == entryName);
@@ -107,9 +401,22 @@ namespace CfgBinEditor.Level5.Binary
             }
         }
 
+        public void ReplaceEntry<T>(string entryBeginName, string entryName, T[] values) where T : class
+        {
+            Entry baseBegin = Entries.Where(x => x.GetName() == entryBeginName).FirstOrDefault();
+            baseBegin.Children.Clear();
+
+            for (int i = 0; i < values.Count(); i++)
+            {
+                Entry newBaseEntry = new Entry(entryName + i, new List<Variable>(), Encoding.UTF8);
+                newBaseEntry.SetVariablesFromClass(values[i]);
+                baseBegin.Children.Add(newBaseEntry);
+            }
+        }
+
         public byte GetEncoding()
         {
-            if (Encoding != null && Encoding.Equals(Encoding.GetEncoding("shift-jis")))
+            if (Encoding != null && Encoding.Equals(Encoding.GetEncoding("SHIFT-JIS")))
             {
                 return 0;
             }
@@ -348,37 +655,40 @@ namespace CfgBinEditor.Level5.Binary
                         depth.Remove(key);
                     }
                 }
+                else if (nodeName == "last_update_date_time" || nodeName == "last_update_user" || nodeName == "last_update_machine")
+                {
+                    Entry newNode = new Entry(name, variables, Encoding);
+                    newNode.EndTerminator = true;
+
+                    output.Add(newNode);
+                }
                 else
                 {
                     Entry newItem = new Entry(name, variables, Encoding);
 
-                    if (i + 1 < entries.Count)
-                    {
-                        string[] nextNameParts = entries[i + 1].Name.Split('_');
-                        string nextNodeType = nextNameParts[nextNameParts.Length - 2].ToLower();
-                        string nextNodeName = string.Join("_", nextNameParts, 0, nextNameParts.Length - 1).ToLower();
+                    string entryNameWithMaxDepth = depth.Aggregate((x, y) => x.Value > y.Value ? x : y).Key;
+                    string[] entryNameWithMaxDepthParts = entryNameWithMaxDepth.Split('_');
+                    string entryBaseName = string.Join("_", entryNameWithMaxDepthParts.Take(entryNameWithMaxDepthParts.Length - 2));
 
-                        if (nextNodeName != nodeName && nextNodeType != "end")
-                        {
-                            stack[stack.Count - 1].Children.Add(newItem);
-                            stack.Add(newItem);
-                        }
-                        else
-                        {
-                            stack[stack.Count - 1].Children.Add(newItem);
-                        }
-                    }
-                    else
+                    if (!name.StartsWith(entryBaseName))
                     {
-                        if (stack.Count() != 0)
+                        if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE"))
                         {
+                            stack.RemoveAt(stack.Count - 1);
+                            depth.Remove(entryNameWithMaxDepth);
                             stack[stack.Count - 1].Children.Add(newItem);
-                        }
-                        else
+                        } else
                         {
-                            output.Add(newItem);
-                        }
+                            Entry lastEntry = stack[stack.Count - 1].Children[stack[stack.Count - 1].Children.Count() - 1];
+                            lastEntry.Children.Add(newItem);
+                            stack.Add(newItem);
+                            depth[name] = stack.Count;
+                        };
+                    } else
+                    {
+                        stack[stack.Count - 1].Children.Add(newItem);
                     }
+
                 }
 
                 i++;

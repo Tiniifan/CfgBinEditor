@@ -2,8 +2,8 @@
 using System.Linq;
 using System.Windows.Forms;
 using System.Collections.Generic;
-using CfgBinEditor.Level5.Logic;
 using CfgBinEditor.Level5.Binary;
+using CfgBinEditor.Level5.Binary.Logic;
 
 namespace CfgBinEditor
 {
@@ -72,7 +72,7 @@ namespace CfgBinEditor
                             Entry[] foundEntries = entry.FindAll(x =>
                                 x.Variables != null &&
                                 x.Variables.Any(y =>
-                                    y.Type == Level5.Logic.Type.String &&
+                                    y.Type == Level5.Binary.Logic.Type.String &&
                                     (y.Value as OffsetTextPair).Offset == Convert.ToInt32(retrievedValue)
                                 )
                             );
@@ -90,7 +90,7 @@ namespace CfgBinEditor
                             Entry[] foundEntries = entry.FindAll(x =>
                                 x.Variables != null &&
                                 x.Variables.Any(y =>
-                                    y.Type == Level5.Logic.Type.String &&
+                                    y.Type == Level5.Binary.Logic.Type.String &&
                                     (y.Value as OffsetTextPair).Text != null &&
                                     (y.Value as OffsetTextPair).Text.StartsWith(retrievedValue.ToString(), StringComparison.OrdinalIgnoreCase)
                                 )
@@ -110,7 +110,7 @@ namespace CfgBinEditor
                         Entry[] foundEntries = entry.FindAll(x =>
                             x.Variables != null &&
                             x.Variables.Any(y =>
-                                y.Type == Level5.Logic.Type.Float &&
+                                y.Type == Level5.Binary.Logic.Type.Float &&
                                 Convert.ToSingle(y.Value) == Convert.ToSingle(retrievedValue)
                             )
                         );
@@ -128,7 +128,7 @@ namespace CfgBinEditor
                         Entry[] foundEntries = entry.FindAll(x =>
                             x.Variables != null &&
                             x.Variables.Any(y =>
-                                y.Type == Level5.Logic.Type.Int &&
+                                y.Type == Level5.Binary.Logic.Type.Int &&
                                 Convert.ToInt32(y.Value) == Convert.ToInt32(retrievedValue)
                             )
                         );

@@ -36,6 +36,10 @@
             this.confirmButton = new System.Windows.Forms.Button();
             this.myIDsButton = new System.Windows.Forms.Button();
             this.listComboBox = new System.Windows.Forms.ComboBox();
+            this.label2 = new System.Windows.Forms.Label();
+            this.tagComboBox = new System.Windows.Forms.ComboBox();
+            this.hashTextBox = new System.Windows.Forms.TextBox();
+            this.tagGroupComboBox = new System.Windows.Forms.ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.integerNumericUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.floatNumericUpDown)).BeginInit();
             this.SuspendLayout();
@@ -162,12 +166,68 @@
             this.listComboBox.TabIndex = 7;
             this.listComboBox.Visible = false;
             // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.ForeColor = System.Drawing.Color.White;
+            this.label2.Location = new System.Drawing.Point(26, 89);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(80, 13);
+            this.label2.TabIndex = 8;
+            this.label2.Text = "Type your hash";
+            this.label2.Visible = false;
+            // 
+            // tagComboBox
+            // 
+            this.tagComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
+            this.tagComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.tagComboBox.ForeColor = System.Drawing.Color.White;
+            this.tagComboBox.FormattingEnabled = true;
+            this.tagComboBox.Location = new System.Drawing.Point(112, 86);
+            this.tagComboBox.Name = "tagComboBox";
+            this.tagComboBox.Size = new System.Drawing.Size(78, 21);
+            this.tagComboBox.TabIndex = 9;
+            this.tagComboBox.Visible = false;
+            this.tagComboBox.SelectedIndexChanged += new System.EventHandler(this.HashTypeComboBox_SelectedIndexChanged);
+            this.tagComboBox.TextChanged += new System.EventHandler(this.HashTypeComboBox_TextChanged);
+            // 
+            // hashTextBox
+            // 
+            this.hashTextBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
+            this.hashTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.hashTextBox.ForeColor = System.Drawing.Color.White;
+            this.hashTextBox.Location = new System.Drawing.Point(281, 84);
+            this.hashTextBox.Multiline = true;
+            this.hashTextBox.Name = "hashTextBox";
+            this.hashTextBox.Size = new System.Drawing.Size(87, 24);
+            this.hashTextBox.TabIndex = 10;
+            this.hashTextBox.Visible = false;
+            this.hashTextBox.TextChanged += new System.EventHandler(this.HashTextBox_TextChanged);
+            // 
+            // tagGroupComboBox
+            // 
+            this.tagGroupComboBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
+            this.tagGroupComboBox.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.tagGroupComboBox.ForeColor = System.Drawing.Color.White;
+            this.tagGroupComboBox.FormattingEnabled = true;
+            this.tagGroupComboBox.Location = new System.Drawing.Point(197, 86);
+            this.tagGroupComboBox.Name = "tagGroupComboBox";
+            this.tagGroupComboBox.Size = new System.Drawing.Size(78, 21);
+            this.tagGroupComboBox.TabIndex = 11;
+            this.tagGroupComboBox.Visible = false;
+            this.tagGroupComboBox.SelectedIndexChanged += new System.EventHandler(this.TagGroupComboBox_SelectedIndexChanged);
+            this.tagGroupComboBox.TextChanged += new System.EventHandler(this.TagGroupComboBox_TextChanged);
+            // 
             // InputValueWindow
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(54)))), ((int)(((byte)(54)))), ((int)(((byte)(54)))));
             this.ClientSize = new System.Drawing.Size(379, 147);
+            this.Controls.Add(this.tagGroupComboBox);
+            this.Controls.Add(this.hashTextBox);
+            this.Controls.Add(this.tagComboBox);
+            this.Controls.Add(this.label2);
             this.Controls.Add(this.listComboBox);
             this.Controls.Add(this.myIDsButton);
             this.Controls.Add(this.confirmButton);
@@ -201,5 +261,9 @@
         private System.Windows.Forms.Button confirmButton;
         private System.Windows.Forms.Button myIDsButton;
         private System.Windows.Forms.ComboBox listComboBox;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.ComboBox tagComboBox;
+        private System.Windows.Forms.TextBox hashTextBox;
+        private System.Windows.Forms.ComboBox tagGroupComboBox;
     }
 }

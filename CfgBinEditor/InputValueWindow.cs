@@ -13,16 +13,25 @@ namespace CfgBinEditor
 
         public bool ShowAsHex;
 
+        public string Hash;
+
+        public string TagName;
+
+        public string TagGroupName;
+
         public object Value { get; private set; }
 
         private object SelectedItem;
 
-        Dictionary<string, Dictionary<string, List<ID>>> IDs;
+        private Dictionary<string, Dictionary<string, List<ID>>> IDs;
 
-        public InputValueWindow(string name, string type, object value, bool showAsHex, bool canOpenIdsWindow = false, Dictionary<string, Dictionary<string, List<ID>>> ids = null, object selectedItem = null)
+        public InputValueWindow(string name, string type, object value, bool showAsHex, bool canOpenIdsWindow = false, Dictionary<string, Dictionary<string, List<ID>>> ids = null, object selectedItem = null, string hash = null, string tagName = null, string tagGroupName = null)
         {
             IDs = ids;
             Type = type;
+            Hash = hash;
+            TagName = tagName;
+            TagGroupName = tagGroupName;
             Value = value;
             ShowAsHex = showAsHex;
             SelectedItem = selectedItem;
@@ -63,6 +72,27 @@ namespace CfgBinEditor
                         integerNumericUpDown.Visible = true;
                         integerNumericUpDown.Value = Convert.ToInt32(Value);
                         break;
+                }
+            }
+
+            if (Hash != null)
+            {
+                label2.Visible = true;
+                hashTextBox.Visible = true;
+                tagComboBox.Visible = true;
+                tagGroupComboBox.Visible = true;
+
+                hashTextBox.Text = Hash;
+                tagComboBox.Items.AddRange(IDs.Keys.ToArray());
+
+                if (TagName != null && tagComboBox.Items.Contains(TagName))
+                {
+                    tagComboBox.SelectedItem = TagName;
+
+                    if (TagGroupName != null && tagGroupComboBox.Items.Contains(TagGroupName))
+                    {
+                        tagGroupComboBox.SelectedItem = TagGroupName;
+                    }
                 }
             }
         }
@@ -162,6 +192,43 @@ namespace CfgBinEditor
                     integerNumericUpDown.Value = Convert.ToUInt32(idsWindow.Hash);
                 }
             }
+        }
+
+        private void HashTypeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            tagGroupComboBox.Items.AddRange(IDs[tagComboBox.SelectedItem.ToString()].Keys.ToArray());
+
+            if (!tagComboBox.Focused) return;
+
+            TagName = tagComboBox.SelectedItem.ToString();
+        }
+
+        private void HashTypeComboBox_TextChanged(object sender, EventArgs e)
+        {
+            if (!tagComboBox.Focused) return;
+
+            TagName = tagComboBox.Text;
+        }
+
+        private void TagGroupComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (!tagGroupComboBox.Focused) return;
+
+            TagGroupName = tagGroupComboBox.SelectedItem.ToString();
+        }
+
+        private void TagGroupComboBox_TextChanged(object sender, EventArgs e)
+        {
+            if (!tagGroupComboBox.Focused) return;
+
+            TagGroupName = tagGroupComboBox.Text;
+        }
+
+        private void HashTextBox_TextChanged(object sender, EventArgs e)
+        {
+            if (!hashTextBox.Focused) return;
+
+            Hash = hashTextBox.Text;
         }
     }
 }
