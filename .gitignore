@@ -1,0 +1,9 @@
+
+.vs/
+CfgBinEditor/bin/Debug/MyTags.txt
+CfgBinEditor/bin/Debug/MyIDs.txt
+CfgBinEditor/bin/Debug/CfgBinEditor.zip
+CfgBinEditor/bin/Release/MyTags.txt
+CfgBinEditor/bin/Release/MyIDs.txt
+CfgBinEditor/bin/Release/CfgBinEditor.zip
+CfgBinEditor/obj/

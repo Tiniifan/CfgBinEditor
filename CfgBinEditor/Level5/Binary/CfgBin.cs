@@ -588,7 +588,7 @@ namespace CfgBinEditor.Level5.Binary
             List<Entry> output = new List<Entry>();
             Dictionary<string, int> depth = new Dictionary<string, int>();
 
-            int i = 0;  // Indice pour parcourir les entrées
+            int i = 0;
 
             while (i < entries.Count)
             {
@@ -667,6 +667,10 @@ namespace CfgBinEditor.Level5.Binary
                     Entry newItem = new Entry(name, variables, Encoding);
 
                     string entryNameWithMaxDepth = depth.Aggregate((x, y) => x.Value > y.Value ? x : y).Key;
+                    if (entryNameWithMaxDepth.Contains("_LIST_BEG_"))
+                    {
+                        entryNameWithMaxDepth = entryNameWithMaxDepth.Replace("_LIST_BEG_", "_BEG_");
+                    }
                     string[] entryNameWithMaxDepthParts = entryNameWithMaxDepth.Split('_');
                     string entryBaseName = string.Join("_", entryNameWithMaxDepthParts.Take(entryNameWithMaxDepthParts.Length - 2));
 
