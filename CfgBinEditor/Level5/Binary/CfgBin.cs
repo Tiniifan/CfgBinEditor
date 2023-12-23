@@ -599,7 +599,7 @@ namespace CfgBinEditor.Level5.Binary
                 string nodeType = nameParts[nameParts.Length - 2].ToLower();
                 string nodeName = string.Join("_", nameParts, 0, nameParts.Length - 1).ToLower();
 
-                if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("ptree"))
+                if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("ptree") && name.Contains("_PTREE") == false)
                 {
                     Entry newNode = new Entry(name, variables, Encoding);
 
@@ -615,7 +615,7 @@ namespace CfgBinEditor.Level5.Binary
                     stack.Add(newNode);
                     depth[name] = stack.Count;
                 }
-                else if (nodeType.EndsWith("end") || nodeType.EndsWith("_ptree"))
+                else if (nodeType.EndsWith("end") || name.Contains("_PTREE"))
                 {
                     stack[stack.Count - 1].EndTerminator = true;
 
@@ -639,7 +639,14 @@ namespace CfgBinEditor.Level5.Binary
                         depth.Keys.CopyTo(keys, 0);
 
                         int currentDepth = depth[key];
-                        int previousDepth = depth[keys[Array.IndexOf(keys, key) - 1]];
+                        int previousDepth = 0;
+                        if (keys.Count() < Array.IndexOf(keys, key) - 1)
+                        {
+                            previousDepth = depth[keys[Array.IndexOf(keys, key) - 1]];
+                        } else
+                        {
+                            previousDepth = depth[keys[Array.IndexOf(keys, key)]];
+                        }
 
                         int popCount = currentDepth - previousDepth;
                         for (int j = 0; j < popCount; j++)
@@ -676,7 +683,7 @@ namespace CfgBinEditor.Level5.Binary
 
                     if (!name.StartsWith(entryBaseName))
                     {
-                        if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE"))
+                        if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE") && name.Contains("_PTREE") == false)
                         {
                             stack.RemoveAt(stack.Count - 1);
                             depth.Remove(entryNameWithMaxDepth);
