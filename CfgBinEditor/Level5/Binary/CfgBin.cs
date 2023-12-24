@@ -640,13 +640,7 @@ namespace CfgBinEditor.Level5.Binary
 
                         int currentDepth = depth[key];
                         int previousDepth = 0;
-                        if (keys.Count() < Array.IndexOf(keys, key) - 1)
-                        {
-                            previousDepth = depth[keys[Array.IndexOf(keys, key) - 1]];
-                        } else
-                        {
-                            previousDepth = depth[keys[Array.IndexOf(keys, key)]];
-                        }
+                        previousDepth = depth[keys[Array.IndexOf(keys, key)]] - 1;
 
                         int popCount = currentDepth - previousDepth;
                         for (int j = 0; j < popCount; j++)
