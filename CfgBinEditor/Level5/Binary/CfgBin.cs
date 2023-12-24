@@ -662,44 +662,47 @@ namespace CfgBinEditor.Level5.Binary
                         depth.Remove(key);
                     }
                 }
-                else if (nodeName == "last_update_date_time" || nodeName == "last_update_user" || nodeName == "last_update_machine")
-                {
-                    Entry newNode = new Entry(name, variables, Encoding);
-                    newNode.EndTerminator = true;
-
-                    output.Add(newNode);
-                }
                 else
                 {
-                    Entry newItem = new Entry(name, variables, Encoding);
-
-                    string entryNameWithMaxDepth = depth.Aggregate((x, y) => x.Value > y.Value ? x : y).Key;
-                    if (entryNameWithMaxDepth.Contains("_LIST_BEG_"))
+                    if (depth.Count == 0)
                     {
-                        entryNameWithMaxDepth = entryNameWithMaxDepth.Replace("_LIST_BEG_", "_BEG_");
-                    }
-                    string[] entryNameWithMaxDepthParts = entryNameWithMaxDepth.Split('_');
-                    string entryBaseName = string.Join("_", entryNameWithMaxDepthParts.Take(entryNameWithMaxDepthParts.Length - 2));
+                        Entry newNode = new Entry(name, variables, Encoding);
+                        newNode.EndTerminator = true;
 
-                    if (!name.StartsWith(entryBaseName))
-                    {
-                        if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE") && name.Contains("_PTREE") == false)
-                        {
-                            stack.RemoveAt(stack.Count - 1);
-                            depth.Remove(entryNameWithMaxDepth);
-                            stack[stack.Count - 1].Children.Add(newItem);
-                        } else
-                        {
-                            Entry lastEntry = stack[stack.Count - 1].Children[stack[stack.Count - 1].Children.Count() - 1];
-                            lastEntry.Children.Add(newItem);
-                            stack.Add(newItem);
-                            depth[name] = stack.Count;
-                        };
+                        output.Add(newNode);
                     } else
                     {
-                        stack[stack.Count - 1].Children.Add(newItem);
-                    }
+                        Entry newItem = new Entry(name, variables, Encoding);
 
+                        string entryNameWithMaxDepth = depth.Aggregate((x, y) => x.Value > y.Value ? x : y).Key;
+                        if (entryNameWithMaxDepth.Contains("_LIST_BEG_"))
+                        {
+                            entryNameWithMaxDepth = entryNameWithMaxDepth.Replace("_LIST_BEG_", "_BEG_");
+                        }
+                        string[] entryNameWithMaxDepthParts = entryNameWithMaxDepth.Split('_');
+                        string entryBaseName = string.Join("_", entryNameWithMaxDepthParts.Take(entryNameWithMaxDepthParts.Length - 2));
+
+                        if (!name.StartsWith(entryBaseName))
+                        {
+                            if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE") && name.Contains("_PTREE") == false)
+                            {
+                                stack.RemoveAt(stack.Count - 1);
+                                depth.Remove(entryNameWithMaxDepth);
+                                stack[stack.Count - 1].Children.Add(newItem);
+                            }
+                            else
+                            {
+                                Entry lastEntry = stack[stack.Count - 1].Children[stack[stack.Count - 1].Children.Count() - 1];
+                                lastEntry.Children.Add(newItem);
+                                stack.Add(newItem);
+                                depth[name] = stack.Count;
+                            };
+                        }
+                        else
+                        {
+                            stack[stack.Count - 1].Children.Add(newItem);
+                        }
+                    }
                 }
 
                 i++;
