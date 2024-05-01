@@ -13,6 +13,8 @@ namespace CfgBinEditor.Level5.Binary.Logic
     {
         public string Name;
 
+        public string CustomName;
+
         public bool EndTerminator;
 
         public Encoding Encoding;
@@ -43,43 +45,28 @@ namespace CfgBinEditor.Level5.Binary.Logic
             EndTerminator = endTerminator;
         }
 
-        public Dictionary<int, string> GetStrings()
+        public string[] GetDistinctStrings(List<Entry> entries = null)
         {
-            Dictionary<int, string> textDictionary = new Dictionary<int, string>();
+            List<string> distinctStrings = new List<string>();
 
-            // Add the text of this entry (if it has string type variables)
-            foreach (Variable variable in Variables)
+            distinctStrings.AddRange(Variables.Where(x => x.Type == Logic.Type.String).Select(x => Convert.ToString(x.Value)).Distinct().ToArray());
+            distinctStrings.AddRange(GetDistinctStrings(Children));
+
+            return distinctStrings.Distinct().ToArray();
+        }
+
+        private Dictionary<string, int> GetStringsTable()
+        {
+            Dictionary<string, int> output = new Dictionary<string, int>();
+
+            int pos = 0;
+            foreach (string myString in GetDistinctStrings())
             {
-                if (variable.Type == Type.String)
-                {
-                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-
-                    if (!textDictionary.ContainsKey(offsetTextPair.Offset))
-                    {
-                        if (offsetTextPair.Offset != -1)
-                        {
-                            textDictionary[offsetTextPair.Offset] = offsetTextPair.Text;
-                        }
-                    }
-                }
+                output.Add(myString, pos);
+                pos += Encoding.GetByteCount(myString) + 1;
             }
 
-            // Recursively traverse children and add their text
-            foreach (Entry childEntry in Children)
-            {
-                Dictionary<int, string> childText = childEntry.GetStrings();
-
-                // Add children's text to the main dictionary
-                foreach (var kvp in childText)
-                {
-                    if (!textDictionary.ContainsKey(kvp.Key))
-                    {
-                        textDictionary[kvp.Key] = kvp.Value;
-                    }
-                }
-            }
-
-            return textDictionary;
+            return output;
         }
 
         public string GetName()
@@ -231,15 +218,15 @@ namespace CfgBinEditor.Level5.Binary.Logic
             return result;
         }
 
-        private byte[] EncodeStrings(Dictionary<int, string> strings)
+        private byte[] EncodeStrings()
         {
             using (MemoryStream memoryStream = new MemoryStream())
             {
                 using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
                 {
-                    foreach (KeyValuePair<int, string> kvp in strings)
+                    foreach (string myString in GetDistinctStrings())
                     {
-                        writer.Write(Encoding.GetBytes(kvp.Value));
+                        writer.Write(Encoding.GetBytes(myString));
                         writer.Write((byte)0x00);
                     }
 
@@ -351,7 +338,7 @@ namespace CfgBinEditor.Level5.Binary.Logic
             return byteArray.ToArray();
         }
 
-        public byte[] EncodeEntry()
+        public byte[] EncodeEntry(Dictionary<string, int> stringsTable)
         {
             using (MemoryStream memoryStream = new MemoryStream())
             {
@@ -373,8 +360,14 @@ namespace CfgBinEditor.Level5.Binary.Logic
                             switch (variable.Type)
                             {
                                 case Type.String:
-                                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-                                    writer.Write(offsetTextPair.Offset);
+                                    string valueString = Convert.ToString(variable.Value);
+                                    if (stringsTable.ContainsKey(valueString))
+                                    {
+                                        writer.Write(stringsTable[valueString]);
+                                    } else
+                                    {
+                                        writer.Write(-1);
+                                    }
                                     break;
                                 case Type.Int:
                                     writer.Write(Convert.ToInt32(variable.Value));
@@ -390,7 +383,7 @@ namespace CfgBinEditor.Level5.Binary.Logic
 
                         foreach (Entry child in Children)
                         {
-                            writer.Write(child.EncodeEntry());
+                            writer.Write(child.EncodeEntry(stringsTable));
                         }
                     }
                     else
@@ -406,8 +399,15 @@ namespace CfgBinEditor.Level5.Binary.Logic
                             switch (variable.Type)
                             {
                                 case Type.String:
-                                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-                                    writer.Write(offsetTextPair.Offset);
+                                    string valueString = Convert.ToString(variable.Value);
+                                    if (stringsTable.ContainsKey(valueString))
+                                    {
+                                        writer.Write(stringsTable[valueString]);
+                                    }
+                                    else
+                                    {
+                                        writer.Write(-1);
+                                    }
                                     break;
                                 case Type.Int:
                                     writer.Write(Convert.ToInt32(variable.Value));
@@ -449,8 +449,7 @@ namespace CfgBinEditor.Level5.Binary.Logic
             using (MemoryStream stream = new MemoryStream())
             using (BinaryDataWriter writer = new BinaryDataWriter(stream))
             {
-                UpdateStringOffsets();
-                Dictionary<int, string> strings = GetStrings();
+                Dictionary<string, int> strings = GetStringsTable();
                 strings = strings.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key, kv => kv.Value);
 
                 CfgBinSupport.Header header;
@@ -461,14 +460,14 @@ namespace CfgBinEditor.Level5.Binary.Logic
 
                 writer.Seek(0x10);
 
-                writer.Write(EncodeEntry());
+                writer.Write(EncodeEntry(strings));
 
                 writer.WriteAlignment(0x10, 0xFF);
                 header.StringTableOffset = (int)writer.Position;
 
                 if (strings.Count > 0)
                 {
-                    writer.Write(EncodeStrings(strings));
+                    writer.Write(EncodeStrings());
                     header.StringTableLength = (int)writer.Position - header.StringTableOffset;
                     writer.WriteAlignment(0x10, 0xFF);
                 }
@@ -499,62 +498,79 @@ namespace CfgBinEditor.Level5.Binary.Logic
             }
         }
 
-        public void UpdateStringOffsets()
+        public void ReplaceString(string oldString, string newString)
         {
-            Dictionary<int, string> strings = GetStrings();
-
-            Dictionary<int, int> newOffsets = new Dictionary<int, int>();
-
-            int currentOffset = 0;
-            foreach (var kvp in strings.OrderBy(kv => kv.Key))
+            foreach(Variable variable in Variables.Where(x => x.Type == Logic.Type.String)) 
             {
-                newOffsets[kvp.Key] = currentOffset;
-                currentOffset += Encoding.GetByteCount(kvp.Value) + 1;
+                if (Convert.ToString(variable.Value) == oldString)
+                {
+                    variable.Value = newString;
+                }
             }
-
-            UpdateOffsetsRecursive(newOffsets);
         }
 
-        private void UpdateOffsetsRecursive(Dictionary<int, int> newOffsets)
+        public bool MatchEntry(string match)
         {
-            foreach (Variable variable in Variables)
+            match = match.ToLower();
+
+            if (GetName().ToLower() == match || GetName().ToLower().StartsWith(match))
             {
-                if (variable.Type == Type.String)
+                return true;
+            }
+            else
+            {
+                foreach (Variable variable in Variables)
                 {
-                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-                    if (newOffsets.ContainsKey(offsetTextPair.Offset))
+                    if (variable.Name != null && (variable.Name.ToLower() == match || variable.Name.ToLower().StartsWith(match)))
                     {
-                        offsetTextPair.Offset = newOffsets[offsetTextPair.Offset];
+                        return true;
+                    } else
+                    {
+                        if (variable.Type == Logic.Type.String)
+                        {
+                            string matchString = Convert.ToString(variable.Value).ToLower();
+                            if (matchString == match | matchString.StartsWith(match))
+                            {
+                                return true;
+                            }
+                        }
+                        else if (variable.Type == Logic.Type.Int)
+                        {
+                            try
+                            {
+                                int matchToInt = Convert.ToInt32(match);
+
+                                if (matchToInt == Convert.ToInt32(variable.Value))
+                                {
+                                    return true;
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                return false;
+                            }
+                        }
+                        else if (variable.Type == Logic.Type.Float)
+                        {
+                            try
+                            {
+                                float matchToInt = Convert.ToSingle(match);
+
+                                if (matchToInt == Convert.ToSingle(variable.Value))
+                                {
+                                    return true;
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                return false;
+                            }
+                        }
                     }
                 }
             }
 
-            foreach (Entry childEntry in Children)
-            {
-                childEntry.UpdateOffsetsRecursive(newOffsets);
-            }
-        }
-
-        public void UpdateString(Dictionary<int, int> newOffsets, Dictionary<int, string> newStrings)
-        {
-            foreach (Variable variable in Variables)
-            {
-                if (variable.Type == Type.String)
-                {
-                    OffsetTextPair offsetTextPair = variable.Value as OffsetTextPair;
-
-                    if (newOffsets.ContainsKey(offsetTextPair.Offset))
-                    {
-                        offsetTextPair.Offset = newOffsets[offsetTextPair.Offset];
-                        offsetTextPair.Text = newStrings[offsetTextPair.Offset];
-                    }
-                }
-            }
-
-            foreach (Entry childEntry in Children)
-            {
-                childEntry.UpdateString(newOffsets, newStrings);
-            }
+            return false;
         }
 
         public void UpdateEntryNames(Dictionary<string, int> nameOccurrences)

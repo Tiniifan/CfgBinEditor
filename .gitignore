@@ -7,3 +7,5 @@ CfgBinEditor/bin/Release/MyTags.txt
 CfgBinEditor/bin/Release/MyIDs.txt
 CfgBinEditor/bin/Release/CfgBinEditor.zip
 CfgBinEditor/obj/
+*.cfg.bin
+*.bin

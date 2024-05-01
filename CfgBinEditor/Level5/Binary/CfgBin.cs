@@ -77,6 +77,8 @@ namespace CfgBinEditor.Level5.Binary
 
         public void Save(string fileName)
         {
+            Dictionary<string, int> stringsTable = GetStringsTable();
+
             using (FileStream stream = new FileStream(fileName, FileMode.Create, FileAccess.Write))
             {
                 BinaryDataWriter writer = new BinaryDataWriter(stream);
@@ -91,7 +93,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 foreach (Entry entry in Entries)
                 {
-                    writer.Write(entry.EncodeEntry());
+                    writer.Write(entry.EncodeEntry(stringsTable));
                 }
 
                 writer.WriteAlignment(0x10, 0xFF);
@@ -99,7 +101,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 if (Strings.Count > 0)
                 {
-                    writer.Write(EncodeStrings(Strings));
+                    writer.Write(EncodeStrings());
                     header.StringTableLength = (int)writer.Position - header.StringTableOffset;
                     writer.WriteAlignment(0x10, 0xFF);
                 }
@@ -122,6 +124,8 @@ namespace CfgBinEditor.Level5.Binary
 
         public byte[] Save()
         {
+            Dictionary<string, int> stringsTable = GetStringsTable();
+
             using (MemoryStream stream = new MemoryStream())
             {
                 BinaryDataWriter writer = new BinaryDataWriter(stream);
@@ -136,7 +140,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 foreach (Entry entry in Entries)
                 {
-                    writer.Write(entry.EncodeEntry());
+                    writer.Write(entry.EncodeEntry(stringsTable));
                 }
 
                 writer.WriteAlignment(0x10, 0xFF);
@@ -144,7 +148,7 @@ namespace CfgBinEditor.Level5.Binary
 
                 if (Strings.Count > 0)
                 {
-                    writer.Write(EncodeStrings(Strings));
+                    writer.Write(EncodeStrings());
                     header.StringTableLength = (int)writer.Position - header.StringTableOffset;
                     writer.WriteAlignment(0x10, 0xFF);
                 }
@@ -261,7 +265,7 @@ namespace CfgBinEditor.Level5.Binary
                     Strings.Add(offset, textValue);
                 }
 
-                return (Logic.Type.String, new OffsetTextPair(offset, textValue));
+                return (Logic.Type.String, textValue);
             }
             else if (valueToken.Type == JTokenType.Integer)
             {
@@ -368,11 +372,11 @@ namespace CfgBinEditor.Level5.Binary
 
         private string GetValueString(object value)
         {
-            if (value is OffsetTextPair)
+            if (value is string)
             {
-                return $"\"{(value as OffsetTextPair).Text}\"";
+                return $"\"{value}\"";
             }
-            else if (value is int)
+            if (value is int)
             {
                 return value.ToString();
             }
@@ -544,7 +548,7 @@ namespace CfgBinEditor.Level5.Binary
                                 text = Strings[offset];
                             }
 
-                            variables.Add(new Variable(Logic.Type.String, new OffsetTextPair(offset, text)));
+                            variables.Add(new Variable(Logic.Type.String, text));
                         }
                         else if (paramTypes[j] == Logic.Type.Int)
                         {
@@ -599,13 +603,28 @@ namespace CfgBinEditor.Level5.Binary
                 string nodeType = nameParts[nameParts.Length - 2].ToLower();
                 string nodeName = string.Join("_", nameParts, 0, nameParts.Length - 1).ToLower();
 
-                if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("ptree") && name.Contains("_PTREE") == false)
+                if (nodeType.EndsWith("beg") || nodeType.EndsWith("begin") || nodeType.EndsWith("start") || nodeType.EndsWith("ptree") && name.Contains("_PTREE") == false)
                 {
                     Entry newNode = new Entry(name, variables, Encoding);
 
                     if (stack.Count > 0)
                     {
-                        stack[stack.Count - 1].Children.Add(newNode);
+                        string entryNameWithMaxDepth = depth.Aggregate((x, y) => x.Value > y.Value ? x : y).Key;
+                        if (entryNameWithMaxDepth.Contains("_LIST_BEG_"))
+                        {
+                            entryNameWithMaxDepth = entryNameWithMaxDepth.Replace("_LIST_BEG_", "_BEG_");
+                        }
+                        string[] entryNameWithMaxDepthParts = entryNameWithMaxDepth.Split('_');
+                        string entryBaseName = string.Join("_", entryNameWithMaxDepthParts.Take(entryNameWithMaxDepthParts.Length - 2));
+
+                        if (name.StartsWith(entryBaseName) && (nodeType.EndsWith("beg") || nodeType.EndsWith("begin")))
+                        {
+                            Entry lastEntry = stack[stack.Count - 1].Children[stack[stack.Count - 1].Children.Count() - 1];
+                            lastEntry.Children.Add(newNode);
+                        } else
+                        {
+                            stack[stack.Count - 1].Children.Add(newNode);
+                        }
                     }
                     else
                     {
@@ -627,6 +646,10 @@ namespace CfgBinEditor.Level5.Binary
                     else if (depth.ContainsKey(name.Replace("_END_", "_BEGIN_")))
                     {
                         key = name.Replace("_END_", "_BEGIN_");
+                    }
+                    else if (depth.ContainsKey(name.Replace("_END_", "_START_")))
+                    {
+                        key = name.Replace("_END_", "_START_");
                     }
                     else if (depth.ContainsKey(name.Replace("_PTREE", "PTREE")))
                     {
@@ -678,7 +701,7 @@ namespace CfgBinEditor.Level5.Binary
 
                         if (!name.StartsWith(entryBaseName))
                         {
-                            if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("PTREE") && name.Contains("_PTREE") == false)
+                            if (!entryNameWithMaxDepth.Contains("BEGIN") && !entryNameWithMaxDepth.Contains("BEG") && !entryNameWithMaxDepth.Contains("START") && !entryNameWithMaxDepth.Contains("PTREE") && name.Contains("_PTREE") == false)
                             {
                                 stack.RemoveAt(stack.Count - 1);
                                 depth.Remove(entryNameWithMaxDepth);
@@ -705,21 +728,35 @@ namespace CfgBinEditor.Level5.Binary
             return output;
         }
 
-        private byte[] EncodeStrings(Dictionary<int, string> strings)
+        private byte[] EncodeStrings()
         {
             using (MemoryStream memoryStream = new MemoryStream())
             {
                 using (BinaryDataWriter writer = new BinaryDataWriter(memoryStream))
                 {
-                    foreach (KeyValuePair<int, string> kvp in strings)
+                    foreach (string myString in GetDistinctStrings())
                     {
-                        writer.Write(Encoding.GetBytes(kvp.Value));
+                        writer.Write(Encoding.GetBytes(myString));
                         writer.Write((byte)0x00);
                     }
 
                     return memoryStream.ToArray();
                 }
             }
+        }
+
+        private Dictionary<string, int> GetStringsTable()
+        {
+            Dictionary<string, int> output = new Dictionary<string, int>();
+
+            int pos = 0;
+            foreach (string myString in GetDistinctStrings())
+            {
+                output.Add(myString, pos);
+                pos += Encoding.GetByteCount(myString) + 1;
+            }
+
+            return output;
         }
 
         public byte[] EncodeKeyTable(List<string> keyList)
@@ -794,69 +831,57 @@ namespace CfgBinEditor.Level5.Binary
             return totalCount;
         }
 
-        public void UpdateStrings(int key, string newText)
+        public string[] GetDistinctStrings()
         {
-            if (Strings.ContainsKey(key))
-            {
-                int offset = 0;
-                Strings[key] = newText;
-
-                Dictionary<int, string> newStrings = new Dictionary<int, string>();
-                Dictionary<int, int> newOffset = new Dictionary<int, int>();
-
-                foreach (KeyValuePair<int, string> kvp in Strings.OrderBy(kv => kv.Key))
-                {
-                    newStrings.Add(offset, kvp.Value);
-                    newOffset.Add(kvp.Key, offset);
-                    offset += Encoding.GetByteCount(kvp.Value) + 1;
-                }
-
-                foreach (Entry entry in Entries)
-                {
-                    entry.UpdateString(newOffset, newStrings);
-                }
-
-                Strings = newStrings;
-            }
+            return GetDistinctStringsRecursive(Entries).Distinct().ToArray();
         }
 
-        private void UpdateStringsEntries(Dictionary<string, object> dictionary, Dictionary<int, int> indexes)
+        private List<string> GetDistinctStringsRecursive(List<Entry> entries)
         {
-            foreach (var kvp in dictionary)
-            {
-                if (kvp.Value is Dictionary<string, object> nestedDictionary)
-                {
-                    UpdateStringsEntries(nestedDictionary, indexes);
-                }
-                else if (kvp.Value is List<Variable> variables)
-                {
-                    foreach (Variable variable in variables)
-                    {
-                        if (variable.Type == Logic.Type.String)
-                        {
-                            int offset = (int)variable.Value;
+            List<string> distinctStrings = new List<string>();
 
-                            if (Strings.ContainsKey(offset))
-                            {
-                                variable.Value = indexes[(int)variable.Value];
-                            }
-                        }
-                    }
+            foreach (Entry entry in entries)
+            {
+                distinctStrings.AddRange(entry.Variables.Where(x => x.Type == Logic.Type.String).Select(x => Convert.ToString(x.Value)).Distinct().ToArray());
+                distinctStrings.AddRange(GetDistinctStringsRecursive(entry.Children));
+            }
+
+            return distinctStrings;
+        }
+
+        public void ReplaceString(string oldString, string newString)
+        {
+            foreach (Entry entry in Entries)
+            {
+                entry.ReplaceString(oldString, newString);
+
+                foreach(Entry child in entry.Children)
+                {
+                    child.ReplaceString(oldString, newString);
                 }
             }
         }
 
-        public void InsertStrings(string newText)
+        public List<Entry> FindEntry(string match)
         {
-            int offset = 0;
+            return FindEntryRecursive(Entries, match).ToList();
+        }
 
-            if (Strings.Count > 0)
+        private List<Entry> FindEntryRecursive(List<Entry> entries, string match)
+        {
+            List<Entry> matchesEntry = new List<Entry>();
+
+            foreach (Entry entry in entries)
             {
-                KeyValuePair<int, string> lastItem = Strings.ElementAt(Strings.Count - 1);
-                offset = lastItem.Key + Encoding.GetBytes(lastItem.Value).Length + 1;
+                if (entry.MatchEntry(match))
+                {
+                    matchesEntry.Add(entry);
+                }
+
+                matchesEntry.AddRange(FindEntryRecursive(entry.Children, match));
             }
 
-            Strings[offset] = newText;
+            return matchesEntry;
         }
     }
 }

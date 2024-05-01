@@ -4,6 +4,7 @@
     {
         public Type Type;
         public object Value;
+        public string Name;
 
         public Variable()
         {
