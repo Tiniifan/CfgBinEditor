@@ -543,7 +543,7 @@ namespace CfgBinEditor.Level5.Binary
                             int offset = reader.ReadValue<int>();
                             string text = null;
 
-                            if (offset != -1)
+                            if (offset != -1 && Strings.ContainsKey(offset))
                             {
                                 text = Strings[offset];
                             }
