@@ -81,13 +81,15 @@ namespace CfgBinEditor.Level5.Binary
 
             using (FileStream stream = new FileStream(fileName, FileMode.Create, FileAccess.Write))
             {
+                int distinctStringCount = GetDistinctStrings().Length;
+
                 BinaryDataWriter writer = new BinaryDataWriter(stream);
 
                 CfgBinSupport.Header header;
                 header.EntriesCount = Count(Entries);
                 header.StringTableOffset = 0;
                 header.StringTableLength = 0;
-                header.StringTableCount = Strings.Count;
+                header.StringTableCount = distinctStringCount;
 
                 writer.Seek(0x10);
 
@@ -99,7 +101,7 @@ namespace CfgBinEditor.Level5.Binary
                 writer.WriteAlignment(0x10, 0xFF);
                 header.StringTableOffset = (int)writer.Position;
 
-                if (Strings.Count > 0)
+                if (distinctStringCount > 0)
                 {
                     writer.Write(EncodeStrings());
                     header.StringTableLength = (int)writer.Position - header.StringTableOffset;
@@ -128,13 +130,15 @@ namespace CfgBinEditor.Level5.Binary
 
             using (MemoryStream stream = new MemoryStream())
             {
+                int distinctStringCount = GetDistinctStrings().Length;
+
                 BinaryDataWriter writer = new BinaryDataWriter(stream);
 
                 CfgBinSupport.Header header;
                 header.EntriesCount = Count(Entries);
                 header.StringTableOffset = 0;
                 header.StringTableLength = 0;
-                header.StringTableCount = Strings.Count;
+                header.StringTableCount = distinctStringCount;
 
                 writer.Seek(0x10);
 
@@ -146,7 +150,7 @@ namespace CfgBinEditor.Level5.Binary
                 writer.WriteAlignment(0x10, 0xFF);
                 header.StringTableOffset = (int)writer.Position;
 
-                if (Strings.Count > 0)
+                if (distinctStringCount > 0)
                 {
                     writer.Write(EncodeStrings());
                     header.StringTableLength = (int)writer.Position - header.StringTableOffset;
@@ -450,7 +454,10 @@ namespace CfgBinEditor.Level5.Binary
             {
                 for (int i = 0; i < stringCount; i++)
                 {
-                    result.Add((int)reader.Position, reader.ReadString(Encoding));
+                    if (!result.ContainsKey((int)reader.Position))
+                    {
+                        result.Add((int)reader.Position, reader.ReadString(Encoding));
+                    }
                 }
             }
 

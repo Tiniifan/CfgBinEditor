@@ -251,6 +251,7 @@ namespace CfgBinEditor
 
         private void DrawTreeView(string rootName, List<Entry> entries)
         {
+            mainTreeView.BeginUpdate(); // Suspendre le redessin
             TreeNode rootNode = new TreeNode(rootName);
             rootNode.ContextMenuStrip = contextMenuStrip3;
             rootNode.Expand();
@@ -262,6 +263,7 @@ namespace CfgBinEditor
 
             mainTreeView.Nodes.Clear();
             mainTreeView.Nodes.Add(rootNode);
+            mainTreeView.EndUpdate(); // Reprendre le redessin
         }
 
         private void DrawVariablesDataGridView(TreeNode node)
@@ -350,10 +352,18 @@ namespace CfgBinEditor
         {
             stringsDataGridView.Rows.Clear();
 
-            foreach (string myString in CfgBinFileOpened.GetDistinctStrings())
+            string[] distinctStrings = CfgBinFileOpened.GetDistinctStrings();
+
+            // Create DataGridViewRow for each distinct string
+            DataGridViewRow[] rows = distinctStrings.Select(s =>
             {
-                stringsDataGridView.Rows.Add(myString);
-            }
+                DataGridViewRow row = new DataGridViewRow();
+                row.CreateCells(stringsDataGridView, s); // Create a cell with the value of the string
+                return row;
+            }).ToArray();
+
+            // Add rows in a single operation
+            stringsDataGridView.Rows.AddRange(rows);
         }
 
         private int ConvertLittleEndianHexToInt(string hexString)
@@ -454,6 +464,8 @@ namespace CfgBinEditor
             }
 
             variablesDataGridView.Rows.Clear();
+
+            
 
             SetSelectecTag();
             DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
@@ -1014,39 +1026,43 @@ namespace CfgBinEditor
                     }
                 }
 
-                var result = IDs?.SelectMany(dict => dict.Value
-                        .SelectMany(pair => pair.Value
-                            .Select((innerValue, innerIndex) => new { Value = innerValue, Index = innerIndex, DictKey = dict.Key, PairKey = pair.Key })
-                        )
-                    )
-                    .FirstOrDefault(item =>
+                InputValueWindow inputValueWindow = null;
+
+                try
+                {
+                    var result = IDs?.SelectMany(dict => dict.Value
+                                            .SelectMany(pair => pair.Value
+                                                .Select((innerValue, innerIndex) => new { Value = innerValue, Index = innerIndex, DictKey = dict.Key, PairKey = pair.Key })
+                                            )
+                                        )
+                                        .FirstOrDefault(item =>
+                                        {
+                                            if (value.GetType() == typeof(string))
+                                            {
+                                                return Convert.ToInt32(value.ToString(), 16) == item.Value.Hash;
+                                            }
+                                            else
+                                            {
+                                                return Convert.ToInt32(value) == item.Value.Hash;
+                                            }
+                                        });
+
+                    if (IDs != null)
                     {
-                        if (value.GetType() == typeof(string))
+                        string hashName = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value.ToString();
+
+                        if (result != null)
                         {
-                            return Convert.ToInt32(value.ToString(), 16) == item.Value.Hash;
+                            inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs, null, hashName, result.DictKey, result.PairKey);
                         }
                         else
                         {
-                            return Convert.ToInt32(value) == item.Value.Hash;
+                            inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs, null, hashName);
                         }
-                    });
 
-                InputValueWindow inputValueWindow = null;
-
-                if (IDs != null)
-                {
-                    string hashName = variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value.ToString();
-
-                    if (result != null)
-                    {
-                        inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs, null, hashName, result.DictKey, result.PairKey);
                     }
-                     else
-                    {
-                        inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs, null, hashName);
-                    }
-                    
-                } else
+                }
+                catch
                 {
                     inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs);
                 }
@@ -1059,7 +1075,6 @@ namespace CfgBinEditor
                     {
                         entry.Variables[variablesDataGridView.CurrentRow.Index].Value = retrievedValue.ToString();
                         variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = retrievedValue.ToString();
-                        CfgBinFileOpened.ReplaceString(Convert.ToString(value), retrievedValue.ToString());
                         FillStrings();
                     }
                     else if (type == "Float")
