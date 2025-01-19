@@ -1067,6 +1067,11 @@ namespace CfgBinEditor
                     inputValueWindow = new InputValueWindow(name, type, value, showAsHex, type == "Int" && IDs != null, IDs);
                 }
 
+                if (inputValueWindow == null)
+                {
+                    inputValueWindow = new InputValueWindow(name, type, value, showAsHex);
+                }
+
                 if (inputValueWindow.ShowDialog() == DialogResult.OK)
                 {
                     object retrievedValue = inputValueWindow.Value;
