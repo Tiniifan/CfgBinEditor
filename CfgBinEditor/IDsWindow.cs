@@ -3,7 +3,7 @@ using System.Data;
 using System.Linq;
 using System.Windows.Forms;
 using System.Collections.Generic;
-using CfgBinEditor.Level5.Binary;
+using CfgBinEditor.CfgBinCore.Common;
 
 namespace CfgBinEditor
 {

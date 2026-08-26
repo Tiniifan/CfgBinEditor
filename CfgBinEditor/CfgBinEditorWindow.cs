@@ -4,15 +4,21 @@ using System.Data;
 using System.Linq;
 using System.Windows.Forms;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using StudioElevenLib.Level5.Binary;
+using StudioElevenLib.Level5.Binary.Logic;
+using StudioElevenLib.Level5.Binary.Collections;
 using CfgBinEditor.UI;
-using CfgBinEditor.Level5.Binary;
-using CfgBinEditor.Level5.Binary.Logic;
+using CfgBinEditor.CfgBinCore.Json;
+using CfgBinEditor.CfgBinCore.Binary;
+using CfgBinEditor.CfgBinCore.Common;
 
 namespace CfgBinEditor
 {
     public partial class CfgBinEditorWindow : Form
     {
-        private CfgBin CfgBinFileOpened;
+
+        private CfgBin<CfgTreeNode> CfgBinFileOpened;
 
         private TreeNode SelectedRightClickTreeNode;
 
@@ -210,33 +216,255 @@ namespace CfgBinEditor
             }
         }
 
-        private TreeNode CreateTreeNode(Entry entry)
+        private CfgTreeNode CloneEntryTree(CfgTreeNode node, int level)
         {
+            Entry clonedEntry = new Entry(node.Item.Name, node.Item.Variables.Select(v => new Variable(v)).ToList());
+            CfgTreeNode clone = new CfgTreeNode(clonedEntry, level);
+
+            foreach (var child in node.Children)
+            {
+                clone.AddChild(CloneEntryTree((CfgTreeNode)child, level + 1));
+            }
+
+            return clone;
+        }
+
+        private void GetEntryNameOccurrences(CfgTreeNode node, Dictionary<string, int> occurrences)
+        {
+            if (!string.IsNullOrEmpty(node.Item.Name))
+            {
+                if (occurrences.ContainsKey(node.Item.Name))
+                {
+                    occurrences[node.Item.Name]++;
+                }
+                else
+                {
+                    occurrences[node.Item.Name] = 1;
+                }
+            }
+
+            foreach (var child in node.Children)
+            {
+                GetEntryNameOccurrences((CfgTreeNode)child, occurrences);
+            }
+        }
+
+        private void UpdateEntryNames(CfgTreeNode node, Dictionary<string, int> occurrences)
+        {
+            if (!string.IsNullOrEmpty(node.Item.Name))
+            {
+                if (occurrences.ContainsKey(node.Item.Name))
+                {
+                    occurrences[node.Item.Name]++;
+                    node.Item.Name = node.Item.Name + "_" + occurrences[node.Item.Name];
+                }
+                else
+                {
+                    occurrences[node.Item.Name] = 1;
+                }
+            }
+
+            foreach (var child in node.Children)
+            {
+                UpdateEntryNames((CfgTreeNode)child, occurrences);
+            }
+        }
+
+        private void FindEntriesRecursive(CfgTreeNode node, string searchText, List<CfgTreeNode> results)
+        {
+            if (node.Item != null && node.Item.Name != null && node.Item.Name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                results.Add(node);
+            }
+
+            foreach (var child in node.Children)
+            {
+                FindEntriesRecursive((CfgTreeNode)child, searchText, results);
+            }
+        }
+
+        private List<CfgTreeNode> FindEntries(CfgTreeNode root, string searchText)
+        {
+            List<CfgTreeNode> results = new List<CfgTreeNode>();
+
+            foreach (var child in root.Children)
+            {
+                FindEntriesRecursive((CfgTreeNode)child, searchText, results);
+            }
+
+            return results;
+        }
+
+        private void ReplaceStringRecursive(CfgTreeNode node, string oldValue, string newValue)
+        {
+            foreach (Variable variable in node.Item.Variables)
+            {
+                if (variable.Type == CfgValueType.String && variable.Value as string == oldValue)
+                {
+                    variable.Value = newValue;
+                }
+            }
+
+            foreach (var child in node.Children)
+            {
+                ReplaceStringRecursive((CfgTreeNode)child, oldValue, newValue);
+            }
+        }
+
+        private void ReplaceString(CfgBin<CfgTreeNode> bin, string oldValue, string newValue)
+        {
+            ReplaceStringRecursive(bin.Entries, oldValue, newValue);
+        }
+
+        private void CollectStrings(CfgTreeNode node, List<string> strings)
+        {
+            foreach (Variable variable in node.Item.Variables)
+            {
+                if (variable.Type == CfgValueType.String && variable.Value is string str && !string.IsNullOrEmpty(str))
+                {
+                    strings.Add(str);
+                }
+            }
+
+            foreach (var child in node.Children)
+            {
+                CollectStrings((CfgTreeNode)child, strings);
+            }
+        }
+
+        private byte[] EntryToBin(CfgTreeNode node)
+        {
+            ExportableCfgBin exportBin = new ExportableCfgBin();
+            CfgTreeNode root = new CfgTreeNode(new Entry("ROOT"), 0);
+            root.AddChild(CloneEntryTree(node, 1));
+            exportBin.SetRoot(root);
+            exportBin.Encoding = CfgBinFileOpened?.Encoding ?? System.Text.Encoding.UTF8;
+
+            return exportBin.Save();
+        }
+
+        private JsonEntry BuildJsonEntry(CfgTreeNode node)
+        {
+            JsonEntry jsonEntry = new JsonEntry();
+            jsonEntry.Name = node.Item.Name;
+
+            foreach (Variable variable in node.Item.Variables)
+            {
+                jsonEntry.Variables.Add(new JsonVariable
+                {
+                    Type = variable.Type.ToString(),
+                    Value = variable.Value != null ? variable.Value.ToString() : null
+                });
+            }
+
+            foreach (var child in node.Children)
+            {
+                jsonEntry.Children.Add(BuildJsonEntry((CfgTreeNode)child));
+            }
+
+            return jsonEntry;
+        }
+
+        private void ExportJson(CfgTreeNode root, string filePath)
+        {
+            List<JsonEntry> jsonEntries = new List<JsonEntry>();
+
+            foreach (var child in root.Children)
+            {
+                jsonEntries.Add(BuildJsonEntry((CfgTreeNode)child));
+            }
+
+            //JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+            //string json = JsonSerializer.Serialize(jsonEntries, options);
+            //File.WriteAllText(filePath, json);
+        }
+
+        private CfgTreeNode BuildEntryFromJson(JsonEntry jsonEntry, int level)
+        {
+            List<Variable> variables = new List<Variable>();
+
+            foreach (JsonVariable jsonVariable in jsonEntry.Variables)
+            {
+                CfgValueType type = (CfgValueType)Enum.Parse(typeof(CfgValueType), jsonVariable.Type);
+                object value = null;
+
+                if (type == CfgValueType.String)
+                {
+                    value = jsonVariable.Value;
+                }
+                else if (type == CfgValueType.Int || type == CfgValueType.Unknown)
+                {
+                    value = Convert.ToInt32(jsonVariable.Value);
+                }
+                else if (type == CfgValueType.Float)
+                {
+                    value = Convert.ToSingle(jsonVariable.Value, System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                variables.Add(new Variable(type, value));
+            }
+
+            CfgTreeNode node = new CfgTreeNode(new Entry(jsonEntry.Name, variables), level);
+
+            foreach (JsonEntry childEntry in jsonEntry.Children)
+            {
+                node.AddChild(BuildEntryFromJson(childEntry, level + 1));
+            }
+
+            return node;
+        }
+
+        private CfgBin<CfgTreeNode> ImportJsonFile(string filePath)
+        {
+            //string json = File.ReadAllText(filePath);
+            //List<JsonEntry> jsonEntries = JsonSerializer.Deserialize<List<JsonEntry>>(json);
+
+            //ExportableCfgBin bin = new ExportableCfgBin();
+            //CfgTreeNode root = new CfgTreeNode(new Entry("ROOT"), 0);
+
+            //foreach (JsonEntry jsonEntry in jsonEntries)
+            //{
+            //    root.AddChild(BuildEntryFromJson(jsonEntry, 1));
+            //}
+
+            //bin.SetRoot(root);
+            //bin.Encoding = System.Text.Encoding.UTF8;
+
+            //return bin;
+
+            return null;
+        }
+
+        private TreeNode CreateTreeNode(CfgTreeNode node)
+        {
+            Entry entry = node.Item;
             TreeNode entryNode = null;
 
-            if (entry.Variables.Count > 0 && entry.Variables[0].Type == Level5.Binary.Logic.Type.Int)
+            if (entry.Variables.Count > 0 && entry.Variables[0].Type == CfgValueType.Int)
             {
                 ID myId = GetID(Convert.ToInt32(entry.Variables[0].Value));
 
                 if (myId != null && myId.Name != "")
                 {
                     entryNode = new TreeNode(myId.Name);
-                } else
+                }
+                else
                 {
                     entryNode = new TreeNode(entry.Name);
                 }
-            } else
+            }
+            else
             {
                 entryNode = new TreeNode(entry.Name);
             }
-            
-            entryNode.Tag = entry;
 
-            if (entry.Children.Count > 0)
+            entryNode.Tag = node;
+
+            if (node.Children.Count > 0)
             {
-                foreach (Entry subEntry in entry.Children)
+                foreach (var subEntry in node.Children)
                 {
-                    entryNode.Nodes.Add(CreateTreeNode(subEntry));
+                    entryNode.Nodes.Add(CreateTreeNode((CfgTreeNode)subEntry));
                 }
 
                 entryNode.ContextMenuStrip = contextMenuStrip1;
@@ -249,14 +477,14 @@ namespace CfgBinEditor
             return entryNode;
         }
 
-        private void DrawTreeView(string rootName, List<Entry> entries)
+        private void DrawTreeView(string rootName, IEnumerable<CfgTreeNode> entries)
         {
             mainTreeView.BeginUpdate(); // Suspendre le redessin
             TreeNode rootNode = new TreeNode(rootName);
             rootNode.ContextMenuStrip = contextMenuStrip3;
             rootNode.Expand();
 
-            foreach (Entry entry in entries)
+            foreach (CfgTreeNode entry in entries)
             {
                 rootNode.Nodes.Add(CreateTreeNode(entry));
             }
@@ -269,17 +497,18 @@ namespace CfgBinEditor
         private void DrawVariablesDataGridView(TreeNode node)
         {
             Tag tag = null;
-            Entry entry = node.Tag as Entry;
+            CfgTreeNode entryNode = node.Tag as CfgTreeNode;
+            Entry entry = entryNode?.Item;
 
             if (entry != null)
             {
                 if (SelectedTag != null && Tags.ContainsKey(SelectedTag))
                 {
-                    tag = Tags[SelectedTag].Find(x => x.Name == entry.GetName());
+                    tag = Tags[SelectedTag].Find(x => x.Name == entry.Name);
                 }
 
                 variablesDataGridView.Rows.Clear();
-                List<Variable> variables = (node.Tag as Entry).Variables;
+                List<Variable> variables = entry.Variables;
 
                 if (variables != null)
                 {
@@ -299,12 +528,12 @@ namespace CfgBinEditor
 
                         DataGridViewComboBoxCell comboBox = (variablesDataGridView.Rows[0].Cells[1] as DataGridViewComboBoxCell);
 
-                        if (variable.Type is Level5.Binary.Logic.Type.String)
+                        if (variable.Type == CfgValueType.String)
                         {
                             variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].SetValues(new object[] { variableName, comboBox.Items[0], variable.Value, false });
                             variablesDataGridView.Rows[variablesDataGridView.Rows.Count - 1].Cells[3].ReadOnly = true;
                         }
-                        else if (variable.Type is Level5.Binary.Logic.Type.Int || variable.Type is Level5.Binary.Logic.Type.Unknown)
+                        else if (variable.Type == CfgValueType.Int || variable.Type == CfgValueType.Unknown)
                         {
                             ID myID = IDs != null
                                 ? IDs.Values
@@ -330,7 +559,7 @@ namespace CfgBinEditor
                                 }
                             }
                         }
-                        else if (variable.Type is Level5.Binary.Logic.Type.Float)
+                        else if (variable.Type == CfgValueType.Float)
                         {
                             if (showAsHex == true)
                             {
@@ -352,7 +581,9 @@ namespace CfgBinEditor
         {
             stringsDataGridView.Rows.Clear();
 
-            string[] distinctStrings = CfgBinFileOpened.GetDistinctStrings();
+            List<string> allStrings = new List<string>();
+            CollectStrings(CfgBinFileOpened.Entries, allStrings);
+            string[] distinctStrings = allStrings.Distinct().ToArray();
 
             // Create DataGridViewRow for each distinct string
             DataGridViewRow[] rows = distinctStrings.Select(s =>
@@ -411,7 +642,8 @@ namespace CfgBinEditor
                 if (inputValueWindow.Value != null && retrievedValue.ToString() != "None")
                 {
                     SelectedTag = retrievedValue.ToString();
-                } else
+                }
+                else
                 {
                     SelectedTag = null;
                 }
@@ -438,7 +670,8 @@ namespace CfgBinEditor
                 {
                     return null;
                 }
-            } else
+            }
+            else
             {
                 return null;
             }
@@ -448,13 +681,12 @@ namespace CfgBinEditor
         {
             if (Path.GetExtension(fileName).Equals(".json", StringComparison.OrdinalIgnoreCase))
             {
-                CfgBinFileOpened = new CfgBin();
-                CfgBinFileOpened.ImportJson(fileName);
+                CfgBinFileOpened = ImportJsonFile(fileName);
             }
             else if (Path.GetExtension(fileName).Equals(".bin", StringComparison.OrdinalIgnoreCase) ||
                      Path.GetExtension(fileName).Equals(".npcbin", StringComparison.OrdinalIgnoreCase))
             {
-                CfgBinFileOpened = new CfgBin();
+                CfgBinFileOpened = new ExportableCfgBin();
                 CfgBinFileOpened.Open(new FileStream(fileName, FileMode.Open, FileAccess.Read));
             }
             else
@@ -465,10 +697,10 @@ namespace CfgBinEditor
 
             variablesDataGridView.Rows.Clear();
 
-            
+
 
             SetSelectecTag();
-            DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
+            DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries.Children.Cast<CfgTreeNode>());
             FillStrings();
 
             // Select first item
@@ -529,7 +761,8 @@ namespace CfgBinEditor
 
             if (inputValueWindow.ShowDialog() == DialogResult.OK)
             {
-                CfgBinFileOpened = new CfgBin();
+                CfgBinFileOpened = new ExportableCfgBin();
+                CfgBinFileOpened.Encoding = System.Text.Encoding.UTF8;
                 SetSelectecTag();
 
                 object retrievedValue = inputValueWindow.Value;
@@ -556,7 +789,7 @@ namespace CfgBinEditor
 
                 if (Path.GetExtension(fileName).Equals(".json", StringComparison.OrdinalIgnoreCase))
                 {
-                    CfgBinFileOpened.ToJson(fileName, Tags[SelectedTag]);
+                    ExportJson(CfgBinFileOpened.Entries, fileName);
                 }
                 else if (Path.GetExtension(fileName).Equals(".bin", StringComparison.OrdinalIgnoreCase))
                 {
@@ -579,7 +812,7 @@ namespace CfgBinEditor
 
         private void ResetToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
+            DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries.Children.Cast<CfgTreeNode>());
         }
 
         private void TreeView1_AfterSelect(object sender, TreeViewEventArgs e)
@@ -588,7 +821,8 @@ namespace CfgBinEditor
             {
                 vsTabControl1.SelectedIndex = 0;
                 DrawVariablesDataGridView(e.Node);
-            } else
+            }
+            else
             {
                 variablesDataGridView.Rows.Clear();
             }
@@ -607,7 +841,7 @@ namespace CfgBinEditor
             if (SelectedRightClickTreeNode != null)
             {
                 TreeNode selectedNode = SelectedRightClickTreeNode;
-                Entry entry = selectedNode.Tag as Entry;
+                CfgTreeNode entryNode = selectedNode.Tag as CfgTreeNode;
 
                 openFileDialog3.FileName = "";
                 openFileDialog3.Filter = "Level 5 Bin files (*.bin)|*.bin";
@@ -615,31 +849,30 @@ namespace CfgBinEditor
 
                 if (openFileDialog3.ShowDialog() == DialogResult.OK)
                 {
-                    CfgBin newCfgBin = new CfgBin();
-                    CfgBinFileOpened.Open(new FileStream(openFileDialog3.FileName, FileMode.Open, FileAccess.Read));
+                    CfgBin<CfgTreeNode> newCfgBin = new ExportableCfgBin();
+                    newCfgBin.Open(new FileStream(openFileDialog3.FileName, FileMode.Open, FileAccess.Read));
 
                     if (newCfgBin != null)
                     {
                         // Get all entries names
                         Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
-                        foreach (var myEntry in CfgBinFileOpened.Entries)
-                        {
-                            myEntry.GetEntryNameOccurrences(nameOccurrences);
-                        }
+                        GetEntryNameOccurrences(CfgBinFileOpened.Entries, nameOccurrences);
 
                         // Update import entries names
-                        foreach (var newEntry in newCfgBin.Entries)
+                        foreach (var child in newCfgBin.Entries.Children)
                         {
-                            newEntry.UpdateEntryNames(nameOccurrences);
+                            CfgTreeNode newEntry = (CfgTreeNode)child;
+                            UpdateEntryNames(newEntry, nameOccurrences);
 
-                            if (entry != null)
+                            if (entryNode != null)
                             {
-                                entry.Children.Add(newEntry);
-                            } else
-                            {
-                                CfgBinFileOpened.Entries.Add(newEntry);
+                                entryNode.AddChild(newEntry);
                             }
-                       
+                            else
+                            {
+                                CfgBinFileOpened.Entries.AddChild(newEntry);
+                            }
+
                             selectedNode.Nodes.Add(CreateTreeNode(newEntry));
                         }
 
@@ -666,7 +899,7 @@ namespace CfgBinEditor
             if (SelectedRightClickTreeNode != null)
             {
                 TreeNode selectedNode = SelectedRightClickTreeNode;
-                Entry entry = selectedNode.Tag as Entry;
+                CfgTreeNode entryNode = selectedNode.Tag as CfgTreeNode;
 
                 saveFileDialog2.Filter = "Level 5 Bin files (*.bin)|*.bin";
                 saveFileDialog2.RestoreDirectory = true;
@@ -674,7 +907,7 @@ namespace CfgBinEditor
 
                 if (saveFileDialog2.ShowDialog() == DialogResult.OK)
                 {
-                    byte[] encodedData = entry.EntryToBin();
+                    byte[] encodedData = EntryToBin(entryNode);
 
                     if (encodedData != null && encodedData.Length > 0)
                     {
@@ -697,11 +930,11 @@ namespace CfgBinEditor
             if (SelectedRightClickTreeNode != null)
             {
                 TreeNode selectedNode = SelectedRightClickTreeNode;
-                Entry entry = selectedNode.Tag as Entry;
+                CfgTreeNode entryNode = selectedNode.Tag as CfgTreeNode;
 
                 mainTreeView.SelectedNode = mainTreeView.Nodes[0];
 
-                CfgBinFileOpened.Entries.Remove(entry);
+                entryNode?.RemoveFromParent();
                 selectedNode.Remove();
 
                 // Reset
@@ -714,7 +947,7 @@ namespace CfgBinEditor
             if (SelectedRightClickTreeNode != null)
             {
                 TreeNode selectedNode = SelectedRightClickTreeNode;
-                Entry entry = selectedNode.Tag as Entry;
+                CfgTreeNode entryNode = selectedNode.Tag as CfgTreeNode;
 
                 openFileDialog4.FileName = "";
                 openFileDialog4.Filter = "Level 5 Bin files (*.bin)|*.bin";
@@ -722,25 +955,34 @@ namespace CfgBinEditor
 
                 if (openFileDialog4.ShowDialog() == DialogResult.OK)
                 {
-                    CfgBin newCfgBin = new CfgBin();
-                    CfgBinFileOpened.Open(new FileStream(openFileDialog4.FileName, FileMode.Open, FileAccess.Read));
+                    CfgBin<CfgTreeNode> newCfgBin = new ExportableCfgBin();
+                    newCfgBin.Open(new FileStream(openFileDialog4.FileName, FileMode.Open, FileAccess.Read));
 
-                    if (newCfgBin != null)
+                    if (newCfgBin != null && newCfgBin.Entries.Children.Count > 0)
                     {
                         TreeNode newNode = null;
 
                         // Get all entries names
                         Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
-                        foreach (var myEntry in CfgBinFileOpened.Entries)
-                        {
-                            myEntry.GetEntryNameOccurrences(nameOccurrences);
-                        }
+                        GetEntryNameOccurrences(CfgBinFileOpened.Entries, nameOccurrences);
 
                         // Update import entries names & strings
-                        newCfgBin.Entries[0].UpdateEntryNames(nameOccurrences);
-                        newNode = CreateTreeNode(newCfgBin.Entries[0]);
+                        CfgTreeNode newEntry = (CfgTreeNode)newCfgBin.Entries.Children[0];
+                        UpdateEntryNames(newEntry, nameOccurrences);
+                        newNode = CreateTreeNode(newEntry);
 
-                        entry = newCfgBin.Entries[0];
+                        CfgTreeNode parentEntryNode = entryNode?.Parent as CfgTreeNode;
+
+                        if (parentEntryNode != null)
+                        {
+                            entryNode.RemoveFromParent();
+                            parentEntryNode.AddChild(newEntry);
+                        }
+                        else
+                        {
+                            CfgBinFileOpened.Entries.RemoveChild(entryNode);
+                            CfgBinFileOpened.Entries.AddChild(newEntry);
+                        }
 
                         // Replace the old node with the new node
                         TreeNode parent = SelectedRightClickTreeNode.Parent;
@@ -785,21 +1027,18 @@ namespace CfgBinEditor
             TreeNode selectedNode = SelectedRightClickTreeNode;
             TreeNode parentNode = SelectedRightClickTreeNode.Parent;
 
-            Entry entry = selectedNode.Tag as Entry;
-            Entry entryParent = selectedNode.Tag as Entry;
-            Entry clonedEntry = entry.Clone();
-            
+            CfgTreeNode entryNode = selectedNode.Tag as CfgTreeNode;
+            CfgTreeNode entryParentNode = parentNode.Tag as CfgTreeNode ?? CfgBinFileOpened.Entries;
+            CfgTreeNode clonedEntryNode = CloneEntryTree(entryNode, entryNode.Level);
+
             // Get all entries names
             Dictionary<string, int> nameOccurrences = new Dictionary<string, int>();
-            foreach (var myEntry in CfgBinFileOpened.Entries)
-            {
-                myEntry.GetEntryNameOccurrences(nameOccurrences);
-            }
+            GetEntryNameOccurrences(CfgBinFileOpened.Entries, nameOccurrences);
 
             // Update import entries names
-            clonedEntry.UpdateEntryNames(nameOccurrences);
-            entryParent.Children.Add(clonedEntry);
-            parentNode.Nodes.Add(CreateTreeNode(clonedEntry));
+            UpdateEntryNames(clonedEntryNode, nameOccurrences);
+            entryParentNode.AddChild(clonedEntryNode);
+            parentNode.Nodes.Add(CreateTreeNode(clonedEntryNode));
 
             TreeNode latestNode = parentNode.Nodes[parentNode.Nodes.Count - 1];
             mainTreeView.SelectedNode = latestNode;
@@ -826,7 +1065,8 @@ namespace CfgBinEditor
         {
             if (VariblesDataGridEditInProgress)
             {
-                Entry entry = mainTreeView.SelectedNode.Tag as Entry;
+                CfgTreeNode entryNode = mainTreeView.SelectedNode.Tag as CfgTreeNode;
+                Entry entry = entryNode.Item;
 
                 variablesDataGridView.Rows[e.RowIndex].Cells[2].ReadOnly = true;
 
@@ -860,7 +1100,7 @@ namespace CfgBinEditor
                             }
                         }
 
-                        entry.Variables[e.RowIndex].Type = Level5.Binary.Logic.Type.Float;
+                        entry.Variables[e.RowIndex].Type = CfgValueType.Float;
                         variablesDataGridView.Rows[e.RowIndex].Cells[3].ReadOnly = false;
                     }
                     else if (type == "String")
@@ -876,7 +1116,7 @@ namespace CfgBinEditor
                             variablesDataGridView.Rows[e.RowIndex].Cells[2].Value = value.ToString();
                         }
 
-                        entry.Variables[e.RowIndex].Type = Level5.Binary.Logic.Type.String;
+                        entry.Variables[e.RowIndex].Type = CfgValueType.String;
                         variablesDataGridView.Rows[e.RowIndex].Cells[3].Value = false;
                         variablesDataGridView.Rows[e.RowIndex].Cells[3].ReadOnly = true;
                         FillStrings();
@@ -903,7 +1143,7 @@ namespace CfgBinEditor
                             }
                         }
 
-                        entry.Variables[e.RowIndex].Type = Level5.Binary.Logic.Type.Int;
+                        entry.Variables[e.RowIndex].Type = CfgValueType.Int;
                         variablesDataGridView.Rows[e.RowIndex].Cells[3].ReadOnly = false;
                     }
                 }
@@ -949,14 +1189,15 @@ namespace CfgBinEditor
             {
                 if (SelectedTag != null)
                 {
-                    Entry entry = mainTreeView.SelectedNode.Tag as Entry;
+                    CfgTreeNode entryNode = mainTreeView.SelectedNode.Tag as CfgTreeNode;
+                    Entry entry = entryNode.Item;
 
-                    Tag tag = Tags[SelectedTag].Find(x => x.Name == entry.GetName());
+                    Tag tag = Tags[SelectedTag].Find(x => x.Name == entry.Name);
 
                     if (tag == null)
                     {
                         tag = new Tag();
-                        tag.Name = entry.GetName();
+                        tag.Name = entry.Name;
 
                         for (int i = 0; i < entry.Variables.Count(); i++)
                         {
@@ -979,12 +1220,13 @@ namespace CfgBinEditor
                         tag.Properties[variablesDataGridView.CurrentRow.Index] = (retrievedValue, property.Item2);
 
                         ExportTags(Tags, "./MyTags.txt");
-                    }                      
+                    }
                 }
             }
             if (e.ColumnIndex == 2)
             {
-                Entry entry = mainTreeView.SelectedNode.Tag as Entry;
+                CfgTreeNode entryNode = mainTreeView.SelectedNode.Tag as CfgTreeNode;
+                Entry entry = entryNode.Item;
 
                 variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].ReadOnly = true;
 
@@ -1126,7 +1368,8 @@ namespace CfgBinEditor
                                     IDs.Add(tagName, new Dictionary<string, List<ID>>());
                                 }
 
-                                if (!IDs[tagName].ContainsKey(tagGroupName)) {
+                                if (!IDs[tagName].ContainsKey(tagGroupName))
+                                {
                                     IDs[tagName].Add(tagGroupName, new List<ID>());
                                 }
 
@@ -1134,7 +1377,8 @@ namespace CfgBinEditor
                                 if (index > -1)
                                 {
                                     IDs[tagName][tagGroupName][index].Name = hashName;
-                                } else
+                                }
+                                else
                                 {
                                     IDs[tagName][tagGroupName].Add(new ID(finalValue, hashName));
                                 }
@@ -1147,7 +1391,8 @@ namespace CfgBinEditor
                             variablesDataGridView.Rows[e.RowIndex].Cells[e.ColumnIndex].Selected = true;
                             variablesDataGridView.FirstDisplayedScrollingRowIndex = e.RowIndex;
                             variablesDataGridView.FirstDisplayedScrollingColumnIndex = e.ColumnIndex;
-                        } else
+                        }
+                        else
                         {
                             if (showAsHex)
                             {
@@ -1157,7 +1402,7 @@ namespace CfgBinEditor
                             {
                                 variablesDataGridView.Rows[variablesDataGridView.CurrentRow.Index].Cells[2].Value = Convert.ToInt32(retrievedValue);
                             }
-                        }                    
+                        }
                     }
                 }
 
@@ -1182,7 +1427,7 @@ namespace CfgBinEditor
             if (inputValueWindow.ShowDialog() == DialogResult.OK)
             {
                 string retrievedValue = Convert.ToString(inputValueWindow.Value);
-                CfgBinFileOpened.ReplaceString(Convert.ToString(value), retrievedValue);
+                ReplaceString(CfgBinFileOpened, Convert.ToString(value), retrievedValue);
 
                 BeginInvoke(new Action(() =>
                 {
@@ -1284,12 +1529,12 @@ namespace CfgBinEditor
 
             if (searchTextBox.Text == null || searchTextBox.Text == "")
             {
-                DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries);
+                DrawTreeView(Path.GetFileNameWithoutExtension(openFileDialog1.FileName), CfgBinFileOpened.Entries.Children.Cast<CfgTreeNode>());
                 searchTextBox.Text = "Search...";
             }
             else
             {
-                List<Entry> entries = CfgBinFileOpened.FindEntry(searchTextBox.Text);
+                List<CfgTreeNode> entries = FindEntries(CfgBinFileOpened.Entries, searchTextBox.Text);
 
                 if (entries.Count > 0)
                 {

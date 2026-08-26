@@ -8,10 +8,11 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>CfgBinEditor</RootNamespace>
     <AssemblyName>CfgBinEditor</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -36,6 +37,9 @@
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Reference Include="StudioElevenLib">
+      <HintPath>..\..\StudioElevenLib\StudioElevenLibNetFramework\bin\Release\StudioElevenLib.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -49,6 +53,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CfgBinCore\Binary\ExportableCfgBin.cs" />
+    <Compile Include="CfgBinCore\Common\ID.cs" />
+    <Compile Include="CfgBinCore\Common\Tag.cs" />
+    <Compile Include="CfgBinCore\Json\JsonEntry.cs" />
+    <Compile Include="CfgBinCore\Json\JsonVariable.cs" />
     <Compile Include="CfgBinEditorWindow.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -67,18 +76,8 @@
     <Compile Include="InputValueWindow.Designer.cs">
       <DependentUpon>InputValueWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="Level5\Binary\CfgBin.cs" />
-    <Compile Include="Level5\Binary\CfgBinSupport.cs" />
-    <Compile Include="MyTag\ID.cs" />
-    <Compile Include="Level5\Binary\Logic\Entry.cs" />
-    <Compile Include="Level5\Binary\Logic\Type.cs" />
-    <Compile Include="Level5\Binary\Logic\Variable.cs" />
-    <Compile Include="MyTag\Tag.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Tools\BinaryDataReader.cs" />
-    <Compile Include="Tools\BinaryDataWriter.cs" />
-    <Compile Include="Tools\Crc32.cs" />
     <Compile Include="UI\VSTabControl.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -99,6 +98,7 @@
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
     </Compile>
     <EmbeddedResource Include="UI\VSTabControl.resx">
       <DependentUpon>VSTabControl.cs</DependentUpon>
